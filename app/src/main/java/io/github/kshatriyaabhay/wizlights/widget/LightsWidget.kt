@@ -193,54 +193,77 @@ private fun Content(lights: List<LightUi>, scanning: Boolean, allBusy: Boolean, 
     val plan = WidgetLayout.layoutFor(size.width.value, size.height.value, lights.size)
     val onAction = if (blocked) actionRunCallback<RefreshAction>() else actionRunCallback<AllPowerAction>(actionParametersOf(OnKey to true))
     val offAction = if (blocked) actionRunCallback<RefreshAction>() else actionRunCallback<AllPowerAction>(actionParametersOf(OnKey to false))
+    val gap = WidgetLayout.GAP.dp
 
-    Column(root) {
-        val rowMod = if (plan.grid) GlanceModifier.fillMaxWidth().height(48.dp) else GlanceModifier.fillMaxWidth().fillMaxHeight()
-        Row(rowMod, verticalAlignment = Alignment.CenterVertically) {
+    /** Row 1: All on, All off, optional inline toggles, optional Rescan. */
+    @Composable
+    fun Header(modifier: GlanceModifier) {
+        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
             val inline = plan.inlineToggles > 0
             val bw = if (inline) GlanceModifier.width(WidgetLayout.COMPACT_BUTTON.dp) else GlanceModifier.defaultWeight()
-            PowerButton(
-                "All on", R.drawable.ic_power_settings_new, plan.iconOnly, allBusy,
-                if (blocked) c.line else c.accent, if (blocked) c.sub else c.onAccent, onAction, bw,
-            )
-            Spacer(GlanceModifier.width(WidgetLayout.GAP.dp))
-            PowerButton("All off", R.drawable.ic_power_settings_new, plan.iconOnly, allBusy, c.line, if (blocked) c.sub else c.text, offAction, bw)
+            PowerButton(true, plan.shortLabels, allBusy, blocked, c, onAction, bw.fillMaxHeight())
+            PowerButton(false, plan.shortLabels, allBusy, blocked, c, offAction, bw.fillMaxHeight().padding(start = gap))
             if (inline) {
                 for (l in lights.take(plan.inlineToggles)) {
-                    Spacer(GlanceModifier.width(WidgetLayout.GAP.dp))
-                    LightToggle(l, c, blocked, GlanceModifier.width(WidgetLayout.INLINE_TOGGLE.dp).fillMaxHeight())
+                    Box(GlanceModifier.defaultWeight().fillMaxHeight().padding(start = gap)) {
+                        LightToggle(l, c, blocked, GlanceModifier.fillMaxSize())
+                    }
                 }
-                Spacer(GlanceModifier.defaultWeight())
             }
             if (plan.showRescan) {
-                Spacer(GlanceModifier.width(WidgetLayout.GAP.dp))
-                Box(
-                    GlanceModifier.width(WidgetLayout.RESCAN.dp).fillMaxHeight().background(c.tile).cornerRadius(12.dp)
-                        .clickable(actionRunCallback<RescanAction>()),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (scanning) {
-                        CircularProgressIndicator(GlanceModifier.size(18.dp), color = c.accent)
-                    } else {
-                        Image(ImageProvider(R.drawable.ic_refresh), "Rescan", GlanceModifier.size(20.dp), colorFilter = ColorFilter.tint(c.sub))
+                Box(GlanceModifier.width(WidgetLayout.RESCAN.dp + gap).fillMaxHeight().padding(start = gap)) {
+                    Box(
+                        GlanceModifier.fillMaxSize().background(c.tile).cornerRadius(12.dp).clickable(actionRunCallback<RescanAction>()),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (scanning) {
+                            CircularProgressIndicator(GlanceModifier.size(18.dp), color = c.accent)
+                        } else {
+                            Image(ImageProvider(R.drawable.ic_refresh), "Rescan", GlanceModifier.size(20.dp), colorFilter = ColorFilter.tint(c.sub))
+                        }
                     }
                 }
             }
         }
-        if (plan.grid) {
-            if (blocked) {
-                Text(
-                    if (gate is Gate.WrongWifi) "Not on your lights' Wi-Fi" else "Connect to Wi-Fi",
-                    GlanceModifier.padding(top = 4.dp),
-                    style = TextStyle(color = c.sub, fontSize = 12.sp),
-                    maxLines = 1,
-                )
+    }
+
+    @Composable
+    fun BlockedLine() {
+        if (blocked) {
+            Text(
+                if (gate is Gate.WrongWifi) "Not on your lights' Wi-Fi" else "Connect to Wi-Fi",
+                GlanceModifier.padding(top = 4.dp),
+                style = TextStyle(color = c.sub, fontSize = 12.sp),
+                maxLines = 1,
+            )
+        }
+    }
+
+    when {
+        !plan.grid -> Column(root) { Header(GlanceModifier.fillMaxWidth().fillMaxHeight()) }
+        plan.fillRows > 0 -> Column(root) {
+            // Everything fits: row 1 and each toggle row share the height evenly.
+            Header(GlanceModifier.fillMaxWidth().defaultWeight())
+            BlockedLine()
+            for (row in lights.chunked(plan.gridColumns).take(plan.fillRows)) {
+                Row(GlanceModifier.fillMaxWidth().defaultWeight().padding(top = gap)) {
+                    for (i in 0 until plan.gridColumns) {
+                        val l = row.getOrNull(i)
+                        Box(GlanceModifier.defaultWeight().fillMaxHeight().padding(start = if (i == 0) 0.dp else gap)) {
+                            if (l != null) LightToggle(l, c, blocked, GlanceModifier.fillMaxSize())
+                        }
+                    }
+                }
             }
-            Spacer(GlanceModifier.height(WidgetLayout.GAP.dp))
+        }
+        else -> Column(root) {
+            Header(GlanceModifier.fillMaxWidth().height(WidgetLayout.HEADER.dp))
+            BlockedLine()
+            Spacer(GlanceModifier.height(gap))
             LazyVerticalGrid(GridCells.Fixed(plan.gridColumns), GlanceModifier.fillMaxSize()) {
                 items(lights, itemId = { it.mac.hashCode().toLong() }) { l ->
                     Box(GlanceModifier.padding(bottom = 6.dp, end = 6.dp)) {
-                        LightToggle(l, c, blocked, GlanceModifier.fillMaxWidth().height(44.dp))
+                        LightToggle(l, c, blocked, GlanceModifier.fillMaxWidth().height(WidgetLayout.GRID_CELL_HEIGHT.dp))
                     }
                 }
             }
@@ -248,50 +271,61 @@ private fun Content(lights: List<LightUi>, scanning: Boolean, allBusy: Boolean, 
     }
 }
 
+/** All on / All off use fixed green and red, whatever the theme, so they are never confused. */
+private val OnGreen = ColorProvider(Color(0xFF2E7D32))
+private val OffRed = ColorProvider(Color(0xFFC62828))
+private val White = ColorProvider(Color.White)
+
 @Composable
 private fun PowerButton(
-    label: String, icon: Int, iconOnly: Boolean, busy: Boolean,
-    fill: ColorProvider, ink: ColorProvider, action: Action, modifier: GlanceModifier,
+    on: Boolean, short: Boolean, busy: Boolean, blocked: Boolean,
+    c: WColors, action: Action, modifier: GlanceModifier,
 ) {
-    Box(
-        modifier.fillMaxHeight().background(fill).cornerRadius(12.dp).clickable(action),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    val fill = if (blocked) c.line else if (on) OnGreen else OffRed
+    val ink = if (blocked) c.sub else White
+    val label = when {
+        short -> if (on) "ON" else "OFF"
+        else -> if (on) "All on" else "All off"
+    }
+    Box(modifier) {
+        Box(
+            GlanceModifier.fillMaxSize().background(fill).cornerRadius(12.dp).clickable(action),
+            contentAlignment = Alignment.Center,
+        ) {
             if (busy) {
                 CircularProgressIndicator(GlanceModifier.size(16.dp), color = ink)
             } else {
-                Image(ImageProvider(icon), if (iconOnly) label else null, GlanceModifier.size(18.dp), colorFilter = ColorFilter.tint(ink))
-            }
-            if (!iconOnly) {
-                Spacer(GlanceModifier.width(6.dp))
-                Text(label, style = TextStyle(color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+                Text(label, style = TextStyle(color = ink, fontSize = 14.sp, fontWeight = FontWeight.Bold), maxLines = 1)
             }
         }
     }
 }
 
+/** On: the accent fill, like the app's filled button. Off: a plain tile with dimmed text. */
 @Composable
 private fun LightToggle(l: LightUi, c: WColors, blocked: Boolean, modifier: GlanceModifier) {
-    val on = l.state.reachable && l.state.on && !blocked
     val reachable = l.state.reachable && !blocked
-    val fill = if (on) c.accentTile else c.offTile
-    val icon = if (on) c.accent else c.dim
-    val ink = if (on) c.text else c.sub
+    val on = reachable && l.state.on
+    val fill = if (on) c.accent else c.tile
+    val ink = when {
+        on -> c.onAccent
+        reachable -> c.sub
+        else -> c.dim
+    }
     val action = if (blocked) actionRunCallback<RefreshAction>() else actionRunCallback<ToggleAction>(actionParametersOf(MacKey to l.mac))
     Row(
         modifier.background(fill).cornerRadius(10.dp).padding(horizontal = 8.dp).clickable(action),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (l.pending) {
-            CircularProgressIndicator(GlanceModifier.size(16.dp), color = icon)
+            CircularProgressIndicator(GlanceModifier.size(16.dp), color = ink)
         } else {
-            Image(ImageProvider(R.drawable.ic_bulb), null, GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(if (reachable) icon else c.dim))
+            Image(ImageProvider(R.drawable.ic_bulb), null, GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(if (on) c.onAccent else c.dim))
         }
         Spacer(GlanceModifier.width(6.dp))
         Text(
             l.light.name,
-            style = TextStyle(color = if (reachable) ink else c.dim, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+            style = TextStyle(color = ink, fontSize = 12.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium),
             maxLines = 1,
         )
     }
