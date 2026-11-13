@@ -68,7 +68,7 @@ class WizRepository(
     private val ssid: SsidReader,
     private val isForeground: () -> Boolean,
 ) {
-    private val client = WizClient(network.sockets, network.filter)
+    private val client = WizClient(network.sockets, network.filter, onError = { DebugLog.d(it) })
 
     private val _lights = MutableStateFlow<List<Light>>(emptyList())
     private val _states = MutableStateFlow<Map<String, LightState>>(emptyMap())
@@ -200,7 +200,14 @@ class WizRepository(
         val lights = _lights.value
         if (lights.isEmpty()) return
         val snap = client.snapshot(lights)
+        DebugLog.d("refresh fg=${isForeground()} " + snap.entries.joinToString { (m, st) -> "${m.takeLast(4)}:${if (st.reachable) (if (st.on) "on" else "off") else "unreachable"}" })
         // A command sent while this poll ran may already have changed a value; the hold protects sliders.
+        if (!isForeground() && snap.values.none { it.reachable }) {
+            // In the background Android can block the network outright; every bulb then fails
+            // at once. That says nothing about the bulbs, so keep the last known states.
+            DebugLog.d("background refresh reached no bulb; keeping last states")
+            return
+        }
         if (System.currentTimeMillis() < holdUntil) {
             _states.update { cur -> snap.mapValues { (mac, s) -> if (s.reachable) cur[mac]?.takeIf { it.reachable } ?: s else s } }
         } else {
@@ -256,6 +263,7 @@ class WizRepository(
         patch(mac) { it.copy(on = on) }
         setPending(mac, true)
         val r = tracked { client.send(l.ip, Command.Power(on)) }
+        DebugLog.d("setPower ${mac.takeLast(4)} on=$on -> $r fg=${isForeground()}")
         setPending(mac, false)
         val result = if (r == SendResult.Ok) ActionResult.Ok else {
             before?.let { b -> patch(mac) { b } }

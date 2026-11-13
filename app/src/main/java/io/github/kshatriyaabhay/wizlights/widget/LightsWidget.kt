@@ -59,7 +59,6 @@ import io.github.kshatriyaabhay.wizlights.theme.PaletteSpec
 import io.github.kshatriyaabhay.wizlights.ui.Ic
 import io.github.kshatriyaabhay.wizlights.ui.Themes
 import io.github.kshatriyaabhay.wizlights.ui.MainActivity
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** The widget colours, from the selected theme's palette. */
@@ -84,6 +83,9 @@ class LightsWidget : GlanceAppWidget() {
         val repo = WizApp.of(context).repository
         repo.ensureLoaded()
         runCatching { repo.checkGate() }
+        // A new widget session (periodic update, first draw, or after the last one went idle)
+        // refreshes bulb state when the app isn't open; the app polls on its own.
+        if (!WizApp.of(context).isForeground) withTimeoutOrNull(5000) { repo.refresh() }
         provideContent {
             val lights by repo.lights.collectAsState()
             val scanning by repo.scanning.collectAsState()
@@ -97,20 +99,6 @@ class LightsWidget : GlanceAppWidget() {
 
 class LightsWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = LightsWidget()
-
-    /** The periodic update (every 30 min) also refreshes bulb state. */
-    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        super.onUpdate(context, appWidgetManager, appWidgetIds)
-        val app = WizApp.of(context)
-        val pending = goAsync()
-        app.scope.launch {
-            try {
-                withTimeoutOrNull(8000) { app.repository.refresh() }
-            } finally {
-                pending.finish()
-            }
-        }
-    }
 }
 
 // ───────────── Actions ─────────────
@@ -136,6 +124,7 @@ class ToggleAction : ActionCallback {
         repo.ensureLoaded()
         val mac = parameters[MacKey] ?: return
         val l = repo.lights.value.firstOrNull { it.mac == mac } ?: return
+        io.github.kshatriyaabhay.wizlights.net.DebugLog.d("widget toggle ${mac.takeLast(4)} reachable=${l.state.reachable} on=${l.state.on} loaded=${repo.loaded.value}")
         if (!l.state.reachable) repo.refresh() else repo.setPower(mac, !l.state.on)
     }
 }
@@ -307,7 +296,12 @@ private fun PowerButton(
 private fun LightToggle(l: LightUi, c: WColors, blocked: Boolean, modifier: GlanceModifier) {
     val reachable = l.state.reachable && !blocked
     val on = reachable && l.state.on
-    val fill = if (on) c.accent else c.tile
+    // On: accent fill. Off: a tile. Unreachable: sunk into the background with a dimmed name.
+    val fill = when {
+        on -> c.accent
+        reachable -> c.tile
+        else -> c.offTile
+    }
     val ink = when {
         on -> c.onAccent
         reachable -> c.sub

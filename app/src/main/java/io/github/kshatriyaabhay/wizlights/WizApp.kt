@@ -38,6 +38,7 @@ class WizApp : Application() {
         SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e -> DebugLog.w("background job failed", e) },
     )
     private val foreground = AtomicBoolean(false)
+    val isForeground: Boolean get() = foreground.get()
 
     val repository: WizRepository by lazy {
         WizRepository(

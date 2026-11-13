@@ -40,6 +40,8 @@ class WizClient(
     private val port: Int = Limits.PORT,
     /** When true, value commands also carry `"state": true`. See WizProtocol.setPilot. */
     @Volatile var combinedState: Boolean = true,
+    /** Called with socket errors, for debug logging. */
+    private val onError: (String) -> Unit = {},
 ) {
     /** Parses a literal IPv4 address. Never resolves a hostname. */
     private fun literal(ip: String): Inet4Address? {
@@ -82,7 +84,8 @@ class WizClient(
             null
         } catch (e: NotLocalException) {
             throw e
-        } catch (_: IOException) {
+        } catch (e: IOException) {
+            onError("call $ip: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
     }
