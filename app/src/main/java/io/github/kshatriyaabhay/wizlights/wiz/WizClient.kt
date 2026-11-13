@@ -140,7 +140,11 @@ class WizClient(
         val socket = try {
             sockets.open(port, broadcast = true)
         } catch (_: IOException) {
-            sockets.open(0, broadcast = true)
+            try {
+                sockets.open(0, broadcast = true)
+            } catch (_: IOException) {
+                return@withContext emptyList()
+            }
         }
         val found = LinkedHashMap<String, Discovered>()
         socket.use { s ->

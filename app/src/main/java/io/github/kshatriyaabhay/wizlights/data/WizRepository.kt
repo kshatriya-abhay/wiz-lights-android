@@ -8,6 +8,7 @@ import io.github.kshatriyaabhay.wizlights.net.SsidReader
 import io.github.kshatriyaabhay.wizlights.net.SsidProblem
 import io.github.kshatriyaabhay.wizlights.net.Transport
 import io.github.kshatriyaabhay.wizlights.net.AddressGuard
+import io.github.kshatriyaabhay.wizlights.net.DebugLog
 import io.github.kshatriyaabhay.wizlights.wiz.Capabilities
 import io.github.kshatriyaabhay.wizlights.wiz.Command
 import io.github.kshatriyaabhay.wizlights.wiz.Light
@@ -18,6 +19,7 @@ import io.github.kshatriyaabhay.wizlights.wiz.Presets
 import io.github.kshatriyaabhay.wizlights.wiz.SendResult
 import io.github.kshatriyaabhay.wizlights.wiz.WizClient
 import io.github.kshatriyaabhay.wizlights.wiz.WizColor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -133,6 +135,7 @@ class WizRepository(
         val g = GateRules.decide(s.restrictWifi, net?.transport, { read }, s.allowedSsids)
         _gate.value = g
         gateAt = now
+        DebugLog.d("gate=$g restrict=${s.restrictWifi} transport=${net?.transport}")
         return g
     }
 
@@ -147,10 +150,18 @@ class WizRepository(
 
     /** Runs [block] only when the gate allows it. */
     private suspend inline fun gated(block: () -> ActionResult): ActionResult {
-        ensureLoaded()
-        val g = checkGate()
-        if (g.blocked) return ActionResult.Failed(gateMessage(g))
-        return block()
+        return try {
+            ensureLoaded()
+            val g = checkGate()
+            if (g.blocked) return fail(gateMessage(g))
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Never let a network or file error take the app down; show it instead.
+            DebugLog.w("action failed", e)
+            fail("Something went wrong: ${e.message ?: e.javaClass.simpleName}")
+        }
     }
 
     // ───────────── Polling helpers ─────────────
@@ -174,6 +185,16 @@ class WizRepository(
     // ───────────── Read ─────────────
 
     suspend fun refresh() {
+        try {
+            refreshInner()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            DebugLog.w("refresh failed", e)
+        }
+    }
+
+    private suspend fun refreshInner() {
         ensureLoaded()
         if (checkGate().blocked) return
         val lights = _lights.value
@@ -196,7 +217,10 @@ class WizRepository(
         }
         try {
             val net = network.current.value ?: return fail("Connect to Wi-Fi to control your lights.")
-            val found = client.discover(listOf(net.subnet.broadcast, AddressGuard.LIMITED_BROADCAST).distinct())
+            val targets = listOf(net.subnet.broadcast, AddressGuard.LIMITED_BROADCAST).distinct()
+            DebugLog.d("discover targets=${targets.map { it.hostAddress }}")
+            val found = client.discover(targets)
+            DebugLog.d("discover found=${found.size} ${found.map { "${it.mac}@${it.ip}" }}")
             val merged = LightBook.merge(_lights.value, found)
             _lights.value = merged
             lightStore.save(merged)

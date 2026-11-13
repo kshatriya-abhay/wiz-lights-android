@@ -10,10 +10,12 @@ import io.github.kshatriyaabhay.wizlights.data.PresetStore
 import io.github.kshatriyaabhay.wizlights.data.SettingsStore
 import io.github.kshatriyaabhay.wizlights.data.SnapshotStore
 import io.github.kshatriyaabhay.wizlights.data.WizRepository
+import io.github.kshatriyaabhay.wizlights.net.DebugLog
 import io.github.kshatriyaabhay.wizlights.net.LocalNetwork
 import io.github.kshatriyaabhay.wizlights.net.SsidReader
 import io.github.kshatriyaabhay.wizlights.widget.LightsWidget
 import androidx.glance.appwidget.updateAll
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -31,7 +33,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Manual DI: one repository per process, shared by the activity and the widget. */
 class WizApp : Application() {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** Background work never crashes the process; failures are logged in debug builds. */
+    val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e -> DebugLog.w("background job failed", e) },
+    )
     private val foreground = AtomicBoolean(false)
 
     val repository: WizRepository by lazy {

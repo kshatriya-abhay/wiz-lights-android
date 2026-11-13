@@ -51,13 +51,13 @@ class LocalNetwork(context: Context) {
     }
 
     init {
-        for (t in listOf(NetworkCapabilities.TRANSPORT_WIFI, NetworkCapabilities.TRANSPORT_ETHERNET)) {
-            val req = NetworkRequest.Builder()
-                .addTransportType(t)
-                .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .build()
-            runCatching { cm.registerNetworkCallback(req, callback) }
-        }
+        // Two transport types in one request match either of them.
+        val req = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        runCatching { cm.registerNetworkCallback(req, callback) }.onFailure { DebugLog.w("registerNetworkCallback failed", it) }
         recompute()
     }
 
@@ -77,6 +77,7 @@ class LocalNetwork(context: Context) {
             LocalNet(network, transport, Subnet(la.address as Inet4Address, la.prefixLength))
         }
         _current.value = candidates.minByOrNull { if (it.transport == Transport.Ethernet) 0 else 1 }
+        DebugLog.d("networks=${known.size} current=${_current.value?.let { "${it.transport} ${it.subnet}" }}")
     }
 
     /** Sockets bound to the current local network, so packets never leave via cellular or a VPN. */
@@ -87,7 +88,14 @@ class LocalNetwork(context: Context) {
             s.reuseAddress = true
             s.broadcast = broadcast
             s.bind(InetSocketAddress(localPort))
-            net.network.bindSocket(s)
+            try {
+                net.network.bindSocket(s)
+            } catch (e: IOException) {
+                // A VPN that covers this app does not let it bypass the VPN (EPERM). The
+                // socket then follows the system routes; AddressGuard still limits every
+                // packet to the local subnet, so nothing can reach the internet.
+                DebugLog.d("bindSocket failed, using system routes: ${e.message}")
+            }
             s
         } catch (e: Exception) {
             s.close()

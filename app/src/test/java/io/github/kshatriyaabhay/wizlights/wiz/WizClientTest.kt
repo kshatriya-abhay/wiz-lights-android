@@ -115,4 +115,12 @@ class WizClientTest {
         assertEquals(listOf("bad"), failed)
         assertEquals(1, c.snapshot(lights.take(1)).size)
     }
+
+    @Test
+    fun socketFailuresNeverThrow() = runBlocking {
+        val broken = WizClient(UdpSockets { _, _ -> throw java.net.SocketException("EPERM") }, TargetFilter { true }, 38899)
+        assertTrue(broken.discover(listOf(InetAddress.getLoopbackAddress()), rounds = 1, listenMs = 100).isEmpty())
+        assertEquals(SendResult.NoReply, broken.send("127.0.0.1", Command.Power(true)))
+        assertFalse(broken.pilot("127.0.0.1").reachable)
+    }
 }
