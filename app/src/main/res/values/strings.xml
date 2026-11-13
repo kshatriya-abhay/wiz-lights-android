@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WiZ Lights</string>
+    <string name="widget_description">All on, all off, rescan and per-light toggles</string>
+    <string name="all_on">All on</string>
+    <string name="all_off">All off</string>
+</resources>

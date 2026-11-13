@@ -1,0 +1,3 @@
+-keepattributes *Annotation*, InnerClasses, Signature
+-dontnote kotlinx.serialization.**
+-keepclassmembers class kotlinx.serialization.json.** { *; }
