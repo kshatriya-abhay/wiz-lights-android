@@ -175,7 +175,7 @@ fun LightsScreen(repo: WizRepository, onSettings: () -> Unit) {
                             runCatching { context.startActivity(Intent(Settings.Panel.ACTION_WIFI)) }
                         }, onLocation = {
                             runCatching { context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
-                        })
+                        }, onRetry = { scope.launch { repo.refreshNow() } })
                     }
                     if (loaded && lights.isEmpty()) {
                         item("empty") {
@@ -239,12 +239,14 @@ private fun EmptyTile(modifier: Modifier, scanning: Boolean, foundNothing: Boole
 }
 
 @Composable
-private fun GateBanner(gate: Gate, modifier: Modifier, onSettings: () -> Unit, onWifi: () -> Unit, onLocation: () -> Unit) {
+private fun GateBanner(gate: Gate, modifier: Modifier, onSettings: () -> Unit, onWifi: () -> Unit, onLocation: () -> Unit, onRetry: () -> Unit) {
     val (text, button, action) = when (gate) {
         Gate.NoLocalNetwork -> Triple("Connect to Wi-Fi to control your lights.", "Wi-Fi settings", onWifi)
         is Gate.WrongWifi -> Triple("Not on your lights' Wi-Fi (connected to ${gate.ssid}).", "Wi-Fi settings", onWifi)
         is Gate.SsidUnavailable -> when (gate.problem) {
             SsidProblem.LocationOff -> Triple("Can't check the Wi-Fi name. Location is turned off.", "Location settings", onLocation)
+            // The permission is there, but the read timed out or came back empty.
+            SsidProblem.Unknown -> Triple("Couldn't read the Wi-Fi name. Try again.", "Try again", onRetry)
             else -> Triple("Can't check the Wi-Fi name. Location permission is needed.", "Grant permission", onSettings)
         }
         Gate.Allowed -> return

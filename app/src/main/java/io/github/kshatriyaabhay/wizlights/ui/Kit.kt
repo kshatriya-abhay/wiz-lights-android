@@ -35,6 +35,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
@@ -399,7 +400,7 @@ fun WizButton(
 fun SquareButton(@DrawableRes icon: Int, description: String, onClick: () -> Unit, enabled: Boolean = true) {
     // The description doubles as a tooltip, shown on long-press or mouse hover.
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip(containerColor = Tn.tileHi, contentColor = Tn.text) { Text(description) } },
         state = rememberTooltipState(),
     ) {

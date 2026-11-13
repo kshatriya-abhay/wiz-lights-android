@@ -18,8 +18,6 @@ data class WidgetPlan(
      * rows share the height evenly, with no empty space. 0 means the grid scrolls.
      */
     val fillRows: Int,
-    /** Width of each of All on / All off, in dp; 0 means they share the row by weight. */
-    val buttonWidth: Float,
     /** True when All on / All off show the short labels "ON" / "OFF". */
     val shortLabels: Boolean,
 )
@@ -56,14 +54,14 @@ object WidgetLayout {
             val free = inner - 2 * COMPACT_BUTTON - GAP - rescanSpace
             val n = minOf(lightCount, MAX_INLINE, max(0, floor(free / (INLINE_TOGGLE_MIN + GAP)).toInt()))
             if (n > 0) {
-                return WidgetPlan(rescan, n, grid = false, gridColumns = 0, fillRows = 0, buttonWidth = COMPACT_BUTTON, shortLabels = true)
+                return WidgetPlan(rescan, n, grid = false, gridColumns = 0, fillRows = 0, shortLabels = true)
             }
         }
 
         val buttonWidth = max(0f, (inner - GAP - rescanSpace) / 2)
         val shortLabels = buttonWidth < FULL_LABEL_MIN
         if (!tall || lightCount == 0) {
-            return WidgetPlan(rescan, 0, grid = false, gridColumns = 0, fillRows = 0, buttonWidth = 0f, shortLabels = shortLabels)
+            return WidgetPlan(rescan, 0, grid = false, gridColumns = 0, fillRows = 0, shortLabels = shortLabels)
         }
 
         val columns = min(lightCount, floor(inner / GRID_CELL).toInt().coerceIn(1, MAX_GRID_COLUMNS))
@@ -76,7 +74,6 @@ object WidgetLayout {
             grid = true,
             gridColumns = columns,
             fillRows = if (fits) rows else 0,
-            buttonWidth = 0f,
             shortLabels = shortLabels,
         )
     }

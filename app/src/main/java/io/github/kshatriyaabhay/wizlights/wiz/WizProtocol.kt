@@ -81,6 +81,13 @@ object WizProtocol {
         return Discovered(mac = mac, ip = ip.capped(), moduleName = r.string("moduleName")?.capped().orEmpty())
     }
 
+    /** The `mac` a getPilot reply names, normalised, or null when the reply has none. */
+    fun pilotMac(bytes: ByteArray, length: Int = bytes.size): String? =
+        result(bytes, length)?.string("mac")?.let(::normalMac)?.takeIf { it.isNotEmpty() }
+
+    /** Lower case without separators, so "A8:BB:50:AA:BB:CC" matches "a8bb50aabbcc". */
+    fun normalMac(mac: String): String = mac.lowercase().filter { it.isLetterOrDigit() }
+
     /** Decodes a getPilot reply into a state. Numbers are clamped; wrong types are ignored. */
     fun pilot(bytes: ByteArray, length: Int = bytes.size): LightState? {
         val r = result(bytes, length) ?: return null

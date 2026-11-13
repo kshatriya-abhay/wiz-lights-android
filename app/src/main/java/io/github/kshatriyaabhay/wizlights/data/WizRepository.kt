@@ -68,7 +68,7 @@ class WizRepository(
     private val ssid: SsidReader,
     private val isForeground: () -> Boolean,
 ) {
-    private val client = WizClient(network.sockets, network.filter, onError = { DebugLog.d(it) })
+    private val client = WizClient(network.sockets, network.filter, onError = { msg -> DebugLog.d { msg } })
 
     private val _lights = MutableStateFlow<List<Light>>(emptyList())
     private val _states = MutableStateFlow<Map<String, LightState>>(emptyMap())
@@ -101,6 +101,14 @@ class WizRepository(
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     private val loadLock = Mutex()
+    /** One refresh at a time; callers that arrive while one runs wait for it (see [refreshIfStale]). */
+    private val refreshLock = Mutex()
+    @Volatile private var lastRefreshAt = 0L
+    /**
+     * Bumped by every local change to a light's state (a command or an optimistic update). A
+     * refresh that started before a bump carries older bulb replies and must not overwrite it.
+     */
+    private val stateEpoch = AtomicInteger(0)
     private val inFlight = AtomicInteger(0)
     @Volatile private var holdUntil = 0L
 
@@ -128,6 +136,25 @@ class WizRepository(
     // ───────────── Gate ─────────────
 
     @Volatile private var gateAt = 0L
+    /** The SSID last read for a network; a network keeps its SSID, so it is read once per network. */
+    @Volatile private var ssidCache: Pair<android.net.Network, SsidRead.Known>? = null
+
+    init {
+        // A new or lost network invalidates the gate decision and the cached SSID at once.
+        scope.launch {
+            network.current.collect {
+                gateAt = 0L
+                if (ssidCache?.first != it?.network) ssidCache = null
+            }
+        }
+    }
+
+    private suspend fun readSsid(net: io.github.kshatriyaabhay.wizlights.net.LocalNet): SsidRead {
+        ssidCache?.let { (n, known) -> if (n == net.network) return known }
+        val r = ssid.read(isForeground())
+        if (r is SsidRead.Known) ssidCache = net.network to r
+        return r
+    }
 
     /** Re-checks the gate at most every 3 s unless [force]d (for example after a settings change). */
     suspend fun checkGate(force: Boolean = false): Gate {
@@ -135,11 +162,11 @@ class WizRepository(
         if (!force && now - gateAt < 3000) return _gate.value
         val s = settingsStore.current()
         val net = network.current.value
-        val read = if (s.restrictWifi && net?.transport == Transport.Wifi) ssid.read(isForeground()) else SsidRead.Unavailable(SsidProblem.Unknown)
+        val read = if (s.restrictWifi && net?.transport == Transport.Wifi) readSsid(net) else SsidRead.Unavailable(SsidProblem.Unknown)
         val g = GateRules.decide(s.restrictWifi, net?.transport, { read }, s.allowedSsids)
         _gate.value = g
         gateAt = now
-        DebugLog.d("gate=$g restrict=${s.restrictWifi} transport=${net?.transport}")
+        DebugLog.d { "gate=$g restrict=${s.restrictWifi} transport=${net?.transport}" }
         return g
     }
 
@@ -149,7 +176,11 @@ class WizRepository(
         Gate.Allowed -> ""
         Gate.NoLocalNetwork -> "Connect to Wi-Fi to control your lights."
         is Gate.WrongWifi -> "Not on your lights' Wi-Fi (connected to ${g.ssid})."
-        is Gate.SsidUnavailable -> "Can't check the Wi-Fi name. Location permission is needed."
+        is Gate.SsidUnavailable -> when (g.problem) {
+            SsidProblem.LocationOff -> "Can't check the Wi-Fi name. Location is turned off."
+            SsidProblem.Unknown -> "Couldn't read the Wi-Fi name. Try again."
+            else -> "Can't check the Wi-Fi name. Location permission is needed."
+        }
     }
 
     /** Runs [block] only when the gate allows it. */
@@ -200,7 +231,21 @@ class WizRepository(
         }
     }
 
-    suspend fun refresh() {
+    /**
+     * For widget redraws: skips the network when the last successful refresh is younger than
+     * [maxAgeMs], and shares one refresh between callers that arrive together (one per widget).
+     */
+    suspend fun refreshIfStale(maxAgeMs: Long = 10_000) {
+        if (System.currentTimeMillis() - lastRefreshAt < maxAgeMs) return
+        refreshLock.withLock {
+            if (System.currentTimeMillis() - lastRefreshAt < maxAgeMs) return
+            refreshUnlocked()
+        }
+    }
+
+    suspend fun refresh() = refreshLock.withLock { refreshUnlocked() }
+
+    private suspend fun refreshUnlocked() {
         try {
             refreshInner()
         } catch (e: CancellationException) {
@@ -215,13 +260,20 @@ class WizRepository(
         if (checkGate().blocked) return
         val lights = _lights.value
         if (lights.isEmpty()) return
+        val epoch = stateEpoch.get()
         val snap = client.snapshot(lights)
-        DebugLog.d("refresh fg=${isForeground()} " + snap.entries.joinToString { (m, st) -> "${m.takeLast(4)}:${if (st.reachable) (if (st.on) "on" else "off") else "unreachable"}" })
+        DebugLog.d { "refresh fg=${isForeground()} " + snap.entries.joinToString { (m, st) -> "${m.takeLast(4)}:${if (st.reachable) (if (st.on) "on" else "off") else "unreachable"}" } }
+        if (stateEpoch.get() != epoch) {
+            // A command changed a light while these replies were in flight; they predate it.
+            // The command runs its own refresh afterwards.
+            DebugLog.d { "refresh superseded by a newer command; dropped" }
+            return
+        }
         // A command sent while this poll ran may already have changed a value; the hold protects sliders.
         if (!isForeground() && snap.values.none { it.reachable }) {
             // In the background Android can block the network outright; every bulb then fails
             // at once. That says nothing about the bulbs, so keep the last known states.
-            DebugLog.d("background refresh reached no bulb; keeping last states")
+            DebugLog.d { "background refresh reached no bulb; keeping last states" }
             return
         }
         if (System.currentTimeMillis() < holdUntil) {
@@ -229,6 +281,7 @@ class WizRepository(
         } else {
             _states.value = snap
         }
+        if (snap.values.any { it.reachable }) lastRefreshAt = System.currentTimeMillis()
     }
 
     suspend fun scan(): ActionResult = gated {
@@ -241,9 +294,9 @@ class WizRepository(
         try {
             val net = network.current.value ?: return fail("Connect to Wi-Fi to control your lights.")
             val targets = listOf(net.subnet.broadcast, AddressGuard.LIMITED_BROADCAST).distinct()
-            DebugLog.d("discover targets=${targets.map { it.hostAddress }}")
+            DebugLog.d { "discover targets=${targets.map { it.hostAddress }}" }
             val found = client.discover(targets)
-            DebugLog.d("discover found=${found.size} ${found.map { "${it.mac}@${it.ip}" }}")
+            DebugLog.d { "discover found=${found.size} ${found.map { "${it.mac}@${it.ip}" }}" }
             val merged = LightBook.merge(_lights.value, found)
             _lights.value = merged
             lightStore.save(merged)
@@ -261,6 +314,7 @@ class WizRepository(
     private fun light(mac: String): Light? = _lights.value.firstOrNull { it.mac == mac }
 
     private fun patch(mac: String, f: (LightState) -> LightState) {
+        stateEpoch.incrementAndGet()
         _states.update { it + (mac to f(it[mac] ?: LightState.Unreachable)) }
     }
 
@@ -270,6 +324,7 @@ class WizRepository(
 
     private fun describe(r: SendResult, name: String): String = when (r) {
         SendResult.Rejected -> "$name rejected the command"
+        SendResult.WrongDevice -> "$name isn't on this network"
         else -> "$name didn't respond"
     }
 
@@ -278,8 +333,8 @@ class WizRepository(
         val before = _states.value[mac]
         patch(mac) { it.copy(on = on) }
         setPending(mac, true)
-        val r = tracked { client.send(l.ip, Command.Power(on)) }
-        DebugLog.d("setPower ${mac.takeLast(4)} on=$on -> $r fg=${isForeground()}")
+        val r = tracked { client.sendVerified(l.ip, l.mac, Command.Power(on)) }
+        DebugLog.d { "setPower ${mac.takeLast(4)} on=$on -> $r fg=${isForeground()}" }
         setPending(mac, false)
         val result = if (r == SendResult.Ok) ActionResult.Ok else {
             before?.let { b -> patch(mac) { b } }
@@ -294,10 +349,11 @@ class WizRepository(
         if (lights.isEmpty()) return ActionResult.Ok
         _allBusy.value = on
         val macs = lights.map { it.mac }.toSet()
+        stateEpoch.incrementAndGet()
         _states.update { cur -> cur.mapValues { (mac, s) -> if (mac in macs && s.reachable) s.copy(on = on) else s } }
         _pending.update { it + macs }
         val failed = try {
-            tracked { client.setAll(lights, on) }.also { DebugLog.d("setAll on=$on failed=${it.map { m -> m.takeLast(4) }} fg=${isForeground()}") }
+            tracked { client.setAll(lights, on) }.also { DebugLog.d { "setAll on=$on failed=${it.map { m -> m.takeLast(4) }} fg=${isForeground()}" } }
         } finally {
             _pending.update { it - macs }
             _allBusy.value = null
@@ -411,15 +467,6 @@ class WizRepository(
     }
 
     // ───────────── Book keeping ─────────────
-
-    suspend fun rename(mac: String, name: String): ActionResult {
-        ensureLoaded()
-        if (name.isBlank()) return fail("empty name")
-        val next = LightBook.rename(_lights.value, mac, name)
-        _lights.value = next
-        lightStore.save(next)
-        return ActionResult.Ok
-    }
 
     /** The edit dialog: a new name and icon in one save. */
     suspend fun editLight(mac: String, name: String, icon: String): ActionResult {

@@ -91,4 +91,12 @@ class WizProtocolTest {
         assertEquals(Capabilities(false, false), Capabilities.of("ESP06_SHDW1_01"))
         assertEquals(Capabilities.All, Capabilities.of(""))
     }
+
+    @Test
+    fun macsAreCompared() {
+        assertEquals("a8bb50aabbcc", WizProtocol.normalMac("A8:BB:50:AA:BB:CC"))
+        assertEquals("a8bb50aabbcc", WizProtocol.pilotMac("""{"result":{"mac":"A8BB50AABBCC","state":true}}""".encodeToByteArray()))
+        assertNull(WizProtocol.pilotMac("""{"result":{"state":true}}""".encodeToByteArray()))
+        assertNull(WizProtocol.pilotMac("""{"result":{"mac":7}}""".encodeToByteArray()))
+    }
 }

@@ -60,6 +60,8 @@ import io.github.kshatriyaabhay.wizlights.ui.Ic
 import io.github.kshatriyaabhay.wizlights.ui.Themes
 import io.github.kshatriyaabhay.wizlights.wiz.WizColor
 import io.github.kshatriyaabhay.wizlights.ui.MainActivity
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** The widget colours, from the selected theme's palette. */
@@ -74,29 +76,43 @@ private class WColors(p: PaletteSpec) {
     val dim = c(p.dim)
     val accent = c(p.accent)
     val onAccent = c(p.onAccent)
-    val accentTile = c(p.accentTile)
 }
 
 class LightsWidget : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val repo = WizApp.of(context).repository
+        val app = WizApp.of(context)
+        val repo = app.repository
         repo.ensureLoaded()
-        runCatching { repo.checkGate() }
-        // A new widget session (periodic update, first draw, or after the last one went idle)
-        // refreshes bulb state when the app isn't open; the app polls on its own.
-        if (!WizApp.of(context).isForeground) withTimeoutOrNull(5000) { repo.refresh() }
-        provideContent {
-            val lights by repo.lights.collectAsState()
-            val scanning by repo.scanning.collectAsState()
-            val refreshing by repo.refreshing.collectAsState()
-            val allBusy by repo.allBusy.collectAsState()
-            val gate by repo.gate.collectAsState()
-            val settings by repo.settings.collectAsState()
-            Content(lights, scanning, refreshing, allBusy, gate, WColors(Themes.palette(context, settings.themeName)))
+        // The saved settings, read before the first draw, so the widget never shows the default theme first.
+        val initialSettings = repo.settingsStore.current()
+        coroutineScope {
+            // Draw from the saved state first, then refresh. A new session (periodic update, first
+            // draw, or a redraw after the last session ended) refreshes only when the app isn't open
+            // (it polls on its own) and the last refresh is older than 10 s; widgets that start
+            // together share one refresh.
+            if (!app.isForeground) launch {
+                runCatching { repo.checkGate() }
+                withTimeoutOrNull(5000) { repo.refreshIfStale() }
+            }
+            provideContent {
+                WidgetBody(context, repo, initialSettings)
+            }
         }
     }
+}
+
+@Composable
+private fun WidgetBody(context: Context, repo: io.github.kshatriyaabhay.wizlights.data.WizRepository, initialSettings: io.github.kshatriyaabhay.wizlights.data.Settings) {
+    val lights by repo.lights.collectAsState()
+    val scanning by repo.scanning.collectAsState()
+    val refreshing by repo.refreshing.collectAsState()
+    val allBusy by repo.allBusy.collectAsState()
+    val gate by repo.gate.collectAsState()
+    val settings by repo.settingsStore.ready.collectAsState()
+    val themeName = (settings ?: initialSettings).themeName
+    Content(lights, scanning, refreshing, allBusy, gate, WColors(Themes.palette(context, themeName)))
 }
 
 class LightsWidgetReceiver : GlanceAppWidgetReceiver() {
@@ -129,15 +145,8 @@ class ToggleAction : ActionCallback {
     }
 }
 
-/** The widget's refresh button: re-reads the saved bulbs only; it does not scan the network. */
+/** The refresh button, and the retry tap on a blocked widget: re-checks the gate and re-reads the saved bulbs (no scan). */
 class RefreshNowAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        WidgetWork.enqueue(context, WidgetWork.OP_REFRESH)
-    }
-}
-
-/** Retry after a blocked gate: re-check it and re-read the bulbs. */
-class RefreshAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         WidgetWork.enqueue(context, WidgetWork.OP_REFRESH)
     }
@@ -187,8 +196,8 @@ private fun Content(lights: List<LightUi>, scanning: Boolean, refreshing: Boolea
 
     val blocked = gate.blocked
     val plan = WidgetLayout.layoutFor(size.width.value, size.height.value, lights.size)
-    val onAction = if (blocked) actionRunCallback<RefreshAction>() else actionRunCallback<AllPowerAction>(actionParametersOf(OnKey to true))
-    val offAction = if (blocked) actionRunCallback<RefreshAction>() else actionRunCallback<AllPowerAction>(actionParametersOf(OnKey to false))
+    val onAction = if (blocked) actionRunCallback<RefreshNowAction>() else actionRunCallback<AllPowerAction>(actionParametersOf(OnKey to true))
+    val offAction = if (blocked) actionRunCallback<RefreshNowAction>() else actionRunCallback<AllPowerAction>(actionParametersOf(OnKey to false))
     val gap = WidgetLayout.GAP.dp
 
     /** Row 1: All on, All off, optional inline toggles, optional Rescan. */
@@ -318,7 +327,7 @@ private fun LightToggle(l: LightUi, c: WColors, blocked: Boolean, modifier: Glan
         reachable -> c.sub
         else -> c.dim
     }
-    val action = if (blocked) actionRunCallback<RefreshAction>() else actionRunCallback<ToggleAction>(actionParametersOf(MacKey to l.mac))
+    val action = if (blocked) actionRunCallback<RefreshNowAction>() else actionRunCallback<ToggleAction>(actionParametersOf(MacKey to l.mac))
     Row(
         modifier.background(fill).cornerRadius(10.dp).padding(horizontal = 8.dp, vertical = 4.dp).clickable(action),
         verticalAlignment = Alignment.CenterVertically,

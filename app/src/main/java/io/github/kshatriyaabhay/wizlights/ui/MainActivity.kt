@@ -26,7 +26,9 @@ class MainActivity : ComponentActivity() {
         handle(intent)
         val repo = WizApp.of(this).repository
         setContent {
-            val settings by repo.settings.collectAsState()
+            // Draw nothing (the window background) until the saved theme is known, rather than one
+            // frame in the default theme. DataStore reads its small file in a few milliseconds.
+            val settings = repo.settingsStore.ready.collectAsState().value ?: return@setContent
             // Material You follows the system's dark mode; the key makes it recompute on a switch.
             val dark = isSystemInDarkTheme()
             val palette = remember(settings.themeName, dark) { Themes.palette(this, settings.themeName) }

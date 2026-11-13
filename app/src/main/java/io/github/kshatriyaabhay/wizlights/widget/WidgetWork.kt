@@ -33,7 +33,7 @@ class WidgetWork(context: Context, params: WorkerParameters) : CoroutineWorker(c
         repo.ensureLoaded()
         val op = inputData.getString(KEY_OP) ?: return Result.success()
         val mac = inputData.getString(KEY_MAC)
-        DebugLog.d("widget work $op ${mac?.takeLast(4).orEmpty()}")
+        DebugLog.d { "widget work $op ${mac?.takeLast(4).orEmpty()}" }
         withTimeoutOrNull(20_000) {
             when (op) {
                 OP_ALL_ON -> repo.setAllPower(true)

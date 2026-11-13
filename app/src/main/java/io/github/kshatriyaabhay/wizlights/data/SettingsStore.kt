@@ -44,6 +44,9 @@ class SettingsStore(private val context: Context, scope: CoroutineScope) {
 
     val settings: StateFlow<Settings> = flow.stateIn(scope, SharingStarted.Eagerly, Settings())
 
+    /** The settings once DataStore has read them; null before that, so callers can wait instead of drawing the defaults. */
+    val ready: StateFlow<Settings?> = flow.stateIn(scope, SharingStarted.Eagerly, null)
+
     suspend fun current(): Settings = flow.first()
 
     suspend fun setTheme(name: String) = context.dataStore.edit { it[K.theme] = name }

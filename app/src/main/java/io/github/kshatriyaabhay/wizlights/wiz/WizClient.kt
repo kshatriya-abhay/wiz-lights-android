@@ -28,7 +28,8 @@ fun interface TargetFilter {
 
 class NotLocalException(address: InetAddress) : IOException("not a local address: ${address.hostAddress}")
 
-enum class SendResult { Ok, Rejected, NoReply, NotLocal }
+/** [WrongDevice]: a device answered at the saved IP, but with another MAC (another network, or DHCP moved the bulb). */
+enum class SendResult { Ok, Rejected, NoReply, NotLocal, WrongDevice }
 
 /**
  * The WiZ UDP client. Pure JVM: sockets and the address filter are
@@ -90,17 +91,45 @@ class WizClient(
         }
     }
 
-    /** getPilot with one retry. An unreachable bulb returns [LightState.Unreachable]. */
-    suspend fun pilot(ip: String): LightState {
+    /** A getPilot result: the state, and whether a different device answered. */
+    data class Pilot(val state: LightState, val wrongDevice: Boolean = false)
+
+    /**
+     * getPilot with one retry. An unreachable bulb returns [LightState.Unreachable]. With
+     * [expectedMac], a reply naming another MAC counts as unreachable: on another network
+     * with the same address range (or after DHCP moved a bulb), the device at the saved IP
+     * is not this light. A reply without a MAC is accepted, since it can't be checked.
+     */
+    suspend fun pilotChecked(ip: String, expectedMac: String?): Pilot {
         repeat(Limits.PILOT_RETRIES + 1) {
             val reply = try {
                 call(ip, WizProtocol.GET_PILOT, Limits.PILOT_TIMEOUT_MS)
             } catch (_: NotLocalException) {
-                return LightState.Unreachable
+                return Pilot(LightState.Unreachable)
             }
-            if (reply != null) WizProtocol.pilot(reply)?.let { return it }
+            if (reply != null) {
+                val state = WizProtocol.pilot(reply) ?: return@repeat
+                val mac = WizProtocol.pilotMac(reply)
+                if (expectedMac != null && mac != null && mac != WizProtocol.normalMac(expectedMac)) {
+                    return Pilot(LightState.Unreachable, wrongDevice = true)
+                }
+                return Pilot(state)
+            }
         }
-        return LightState.Unreachable
+        return Pilot(LightState.Unreachable)
+    }
+
+    suspend fun pilot(ip: String, expectedMac: String? = null): LightState = pilotChecked(ip, expectedMac).state
+
+    /**
+     * Sends [cmd] only after a getPilot confirms the device at [ip] is the light [mac]. Used for
+     * power commands, which the widget can send from any network.
+     */
+    suspend fun sendVerified(ip: String, mac: String, cmd: Command, timeoutMs: Int = Limits.SET_TIMEOUT_MS): SendResult {
+        val p = pilotChecked(ip, mac)
+        if (p.wrongDevice) return SendResult.WrongDevice
+        if (!p.state.reachable) return SendResult.NoReply
+        return send(ip, cmd, timeoutMs)
     }
 
     suspend fun send(ip: String, cmd: Command, timeoutMs: Int = Limits.SET_TIMEOUT_MS): SendResult {
@@ -114,11 +143,11 @@ class WizClient(
     }
 
     /** getPilot for each light, [Limits.PARALLELISM] at a time. Keyed by MAC. */
-    suspend fun snapshot(lights: List<Light>): Map<String, LightState> = parallel(lights.take(Limits.MAX_LIGHTS)) { it.mac to pilot(it.ip) }.toMap()
+    suspend fun snapshot(lights: List<Light>): Map<String, LightState> = parallel(lights.take(Limits.MAX_LIGHTS)) { it.mac to pilot(it.ip, it.mac) }.toMap()
 
     /** Powers every light on or off in parallel. Returns the MACs that failed. */
     suspend fun setAll(lights: List<Light>, on: Boolean): List<String> =
-        parallel(lights.take(Limits.MAX_LIGHTS)) { it.mac to send(it.ip, Command.Power(on), Limits.SET_ALL_TIMEOUT_MS) }
+        parallel(lights.take(Limits.MAX_LIGHTS)) { it.mac to sendVerified(it.ip, it.mac, Command.Power(on), Limits.SET_ALL_TIMEOUT_MS) }
             .filter { it.second != SendResult.Ok }
             .map { it.first }
 

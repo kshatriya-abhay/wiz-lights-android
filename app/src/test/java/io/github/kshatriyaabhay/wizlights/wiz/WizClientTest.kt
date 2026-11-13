@@ -123,4 +123,34 @@ class WizClientTest {
         assertEquals(SendResult.NoReply, broken.send("127.0.0.1", Command.Power(true)))
         assertFalse(broken.pilot("127.0.0.1").reachable)
     }
+
+    @Test
+    fun aDifferentMacAtTheSavedIpIsNotThisLight() = runBlocking {
+        val b = bulb(mac = "a8bb50aabbcc")
+        val c = client(b.port)
+        assertTrue(c.pilot("127.0.0.1", "A8:BB:50:AA:BB:CC").reachable)
+        val other = c.pilotChecked("127.0.0.1", "112233445566")
+        assertFalse(other.state.reachable)
+        assertTrue(other.wrongDevice)
+        // A wrong device answers the first try, so there is no retry.
+        assertEquals(2, b.received.size)
+    }
+
+    @Test
+    fun powerIsOnlySentToTheSavedMac() = runBlocking {
+        val b = bulb(mac = "a8bb50aabbcc")
+        val c = client(b.port)
+        assertEquals(SendResult.WrongDevice, c.sendVerified("127.0.0.1", "112233445566", Command.Power(false)))
+        assertTrue("no setPilot to a stranger's device", b.received.none { it["method"]!!.jsonPrimitive.content == "setPilot" })
+        assertEquals(SendResult.Ok, c.sendVerified("127.0.0.1", "a8bb50aabbcc", Command.Power(false)))
+        assertEquals(1, b.received.count { it["method"]!!.jsonPrimitive.content == "setPilot" })
+        assertEquals(listOf("other"), c.setAll(listOf(Light("a8bb50aabbcc", "127.0.0.1"), Light("other", "127.0.0.1")), true))
+    }
+
+    @Test
+    fun verifiedSendToAnOfflineBulbSendsNoCommand() = runBlocking {
+        val silent = bulb(reply = false)
+        assertEquals(SendResult.NoReply, client(silent.port).sendVerified("127.0.0.1", silent.mac, Command.Power(true)))
+        assertTrue(silent.received.none { it["method"]!!.jsonPrimitive.content == "setPilot" })
+    }
 }

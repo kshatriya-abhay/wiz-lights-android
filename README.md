@@ -5,8 +5,8 @@ Control Philips WiZ bulbs over your local network. No account, no cloud, no inte
 - Scans the Wi-Fi (or Ethernet) network for WiZ bulbs, saves them by MAC and lets you name them
 - Per-bulb power, brightness, white temperature (2200–6500 K), colour (hue × saturation plane), 12 scenes and saved presets
 - All on / all off
-- Resizable home-screen widget: 2×1 shows All on / All off; wider adds Rescan; more room adds light toggles
-- 23 stock Omarchy themes, styled like [Flux](https://github.com/bjarneo/flux)
+- Resizable home-screen widget: 2×1 shows ON / OFF; wider adds a refresh button; more room adds light toggles in each bulb's colour. Widget taps also work with Battery Saver on
+- Material You (Android 12+) and 23 stock Omarchy themes, styled like [Flux](https://github.com/bjarneo/flux); bulb or lamp icon per light
 - Optional "only on chosen Wi-Fi networks" restriction
 
 It is the Android counterpart of the [WiZ Lights plugin](https://github.com/kshatriya-abhay/omarchy-wiz-lights-plugin)
@@ -20,6 +20,7 @@ Android requires the `INTERNET` permission for any socket, including UDP on the 
 - every socket is bound to the Wi-Fi or Ethernet network, never cellular. When a VPN covers the app, Android refuses that binding, and the socket follows the system routes instead (VPN apps normally route the LAN directly),
 - every packet goes to, and every reply must come from, an address on that network's subnet or `255.255.255.255` (`net/AddressGuard.kt`),
 - IP addresses are parsed as literals; no hostname is ever resolved,
+- a bulb's state is only trusted, and power commands are only sent, when the device at the saved IP answers with the saved MAC, so on another network with the same address range nothing is switched,
 - no HTTP library, analytics or crash reporting; a unit test fails the build if one appears on the classpath,
 - cleartext HTTP is denied, backups are off.
 

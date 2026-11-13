@@ -54,6 +54,12 @@ class WizApp : Application() {
     }
 
     private var poller: Job? = null
+    /** Set when the widget's content changed while the app was open; redrawn once on leaving. */
+    private val widgetDirty = AtomicBoolean(false)
+
+    private fun updateWidget() {
+        scope.launch { runCatching { LightsWidget().updateAll(this@WizApp) } }
+    }
 
     @OptIn(FlowPreview::class)
     override fun onCreate() {
@@ -68,6 +74,7 @@ class WizApp : Application() {
                 foreground.set(false)
                 poller?.cancel()
                 poller = null
+                if (widgetDirty.getAndSet(false)) updateWidget()
             }
         })
 
@@ -77,12 +84,15 @@ class WizApp : Application() {
             combine(repo.lights, combine(repo.scanning, repo.refreshing) { a, b -> a to b }, repo.allBusy, repo.gate, repo.settings) { lights, scanning, busy, gate, settings ->
                 listOf(lights.map { listOf(it.mac, it.light.name, it.light.icon, it.pending, io.github.kshatriyaabhay.wizlights.wiz.WizColor.colorOf(it.state), it.state.reachable) }, scanning, busy, gate, settings.themeName)
             }.distinctUntilChanged().drop(1).debounce(250).collect {
-                runCatching { LightsWidget().updateAll(this@WizApp) }
+                // While the app is open the widget can't be seen (a slider drag would redraw it
+                // over and over); mark it and redraw once when the app goes to the background.
+                if (foreground.get()) widgetDirty.set(true) else runCatching { LightsWidget().updateAll(this@WizApp) }
             }
         }
-        // The snapshot keeps the last known state for a cold start and the widget.
+        // The snapshot keeps the last known state for a cold start and the widget. Signal
+        // strength changes on almost every poll, so it doesn't count as a change here.
         scope.launch {
-            repo.lights.map { l -> l.map { it.mac to it.state } }.distinctUntilChanged().drop(1).debounce(1000).collect {
+            repo.lights.map { l -> l.map { it.mac to it.state.copy(rssi = null) } }.distinctUntilChanged().drop(1).debounce(1000).collect {
                 runCatching { repo.saveSnapshot() }
             }
         }
