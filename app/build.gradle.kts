@@ -27,8 +27,8 @@ android {
         applicationId = "io.github.kshatriyaabhay.wizlights"
         minSdk = 29
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.0"
+        versionCode = 11
+        versionName = "1.0.1"
     }
 
     signingConfigs {
