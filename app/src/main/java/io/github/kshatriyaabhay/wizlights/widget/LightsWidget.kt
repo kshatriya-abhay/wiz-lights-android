@@ -58,6 +58,7 @@ import io.github.kshatriyaabhay.wizlights.net.Gate
 import io.github.kshatriyaabhay.wizlights.theme.PaletteSpec
 import io.github.kshatriyaabhay.wizlights.ui.Ic
 import io.github.kshatriyaabhay.wizlights.ui.Themes
+import io.github.kshatriyaabhay.wizlights.wiz.WizColor
 import io.github.kshatriyaabhay.wizlights.ui.MainActivity
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -89,10 +90,11 @@ class LightsWidget : GlanceAppWidget() {
         provideContent {
             val lights by repo.lights.collectAsState()
             val scanning by repo.scanning.collectAsState()
+            val refreshing by repo.refreshing.collectAsState()
             val allBusy by repo.allBusy.collectAsState()
             val gate by repo.gate.collectAsState()
             val settings by repo.settings.collectAsState()
-            Content(lights, scanning, allBusy, gate, WColors(Themes.palette(context, settings.themeName)))
+            Content(lights, scanning, refreshing, allBusy, gate, WColors(Themes.palette(context, settings.themeName)))
         }
     }
 }
@@ -106,34 +108,38 @@ class LightsWidgetReceiver : GlanceAppWidgetReceiver() {
 internal val MacKey = ActionParameters.Key<String>("mac")
 internal val OnKey = ActionParameters.Key<Boolean>("on")
 
+// Each tap hands its work to WidgetWork (expedited), which still has network under Battery Saver.
+
 class AllPowerAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        WizApp.of(context).repository.setAllPower(parameters[OnKey] ?: true)
+        WidgetWork.enqueue(context, if (parameters[OnKey] != false) WidgetWork.OP_ALL_ON else WidgetWork.OP_ALL_OFF)
     }
 }
 
 class RescanAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        WizApp.of(context).repository.scan()
+        WidgetWork.enqueue(context, WidgetWork.OP_SCAN)
     }
 }
 
 class ToggleAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val repo = WizApp.of(context).repository
-        repo.ensureLoaded()
         val mac = parameters[MacKey] ?: return
-        val l = repo.lights.value.firstOrNull { it.mac == mac } ?: return
-        io.github.kshatriyaabhay.wizlights.net.DebugLog.d("widget toggle ${mac.takeLast(4)} reachable=${l.state.reachable} on=${l.state.on} loaded=${repo.loaded.value}")
-        if (!l.state.reachable) repo.refresh() else repo.setPower(mac, !l.state.on)
+        WidgetWork.enqueue(context, WidgetWork.OP_TOGGLE, mac)
     }
 }
 
+/** The widget's refresh button: re-reads the saved bulbs only; it does not scan the network. */
+class RefreshNowAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        WidgetWork.enqueue(context, WidgetWork.OP_REFRESH)
+    }
+}
+
+/** Retry after a blocked gate: re-check it and re-read the bulbs. */
 class RefreshAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val repo = WizApp.of(context).repository
-        repo.checkGate(force = true)
-        repo.refresh()
+        WidgetWork.enqueue(context, WidgetWork.OP_REFRESH)
     }
 }
 
@@ -147,7 +153,7 @@ private fun openApp(context: Context, settings: Boolean = false): Action =
 // ───────────── Content ─────────────
 
 @Composable
-private fun Content(lights: List<LightUi>, scanning: Boolean, allBusy: Boolean, gate: Gate, c: WColors) {
+private fun Content(lights: List<LightUi>, scanning: Boolean, refreshing: Boolean, allBusy: Boolean, gate: Gate, c: WColors) {
     val context = androidx.glance.LocalContext.current
     val size = LocalSize.current
     val tall = size.height.value >= WidgetLayout.TALL
@@ -196,20 +202,20 @@ private fun Content(lights: List<LightUi>, scanning: Boolean, allBusy: Boolean, 
             if (inline) {
                 for (l in lights.take(plan.inlineToggles)) {
                     Box(GlanceModifier.defaultWeight().fillMaxHeight().padding(start = gap)) {
-                        LightToggle(l, c, blocked, GlanceModifier.fillMaxSize())
+                        LightToggle(l, c, blocked, GlanceModifier.fillMaxSize(), maxLines = 3)
                     }
                 }
             }
             if (plan.showRescan) {
                 Box(GlanceModifier.width(WidgetLayout.RESCAN.dp + gap).fillMaxHeight().padding(start = gap)) {
                     Box(
-                        GlanceModifier.fillMaxSize().background(c.tile).cornerRadius(12.dp).clickable(actionRunCallback<RescanAction>()),
+                        GlanceModifier.fillMaxSize().background(c.tile).cornerRadius(12.dp).clickable(actionRunCallback<RefreshNowAction>()),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (scanning) {
+                        if (refreshing || scanning) {
                             CircularProgressIndicator(GlanceModifier.size(18.dp), color = c.accent)
                         } else {
-                            Image(ImageProvider(R.drawable.ic_refresh), "Rescan", GlanceModifier.size(20.dp), colorFilter = ColorFilter.tint(c.sub))
+                            Image(ImageProvider(R.drawable.ic_refresh), "Refresh lights", GlanceModifier.size(20.dp), colorFilter = ColorFilter.tint(c.sub))
                         }
                     }
                 }
@@ -240,7 +246,7 @@ private fun Content(lights: List<LightUi>, scanning: Boolean, allBusy: Boolean, 
                     for (i in 0 until plan.gridColumns) {
                         val l = row.getOrNull(i)
                         Box(GlanceModifier.defaultWeight().fillMaxHeight().padding(start = if (i == 0) 0.dp else gap)) {
-                            if (l != null) LightToggle(l, c, blocked, GlanceModifier.fillMaxSize())
+                            if (l != null) LightToggle(l, c, blocked, GlanceModifier.fillMaxSize(), maxLines = 3)
                         }
                     }
                 }
@@ -253,7 +259,7 @@ private fun Content(lights: List<LightUi>, scanning: Boolean, allBusy: Boolean, 
             LazyVerticalGrid(GridCells.Fixed(plan.gridColumns), GlanceModifier.fillMaxSize()) {
                 items(lights, itemId = { it.mac.hashCode().toLong() }) { l ->
                     Box(GlanceModifier.padding(bottom = 6.dp, end = 6.dp)) {
-                        LightToggle(l, c, blocked, GlanceModifier.fillMaxWidth().height(WidgetLayout.GRID_CELL_HEIGHT.dp))
+                        LightToggle(l, c, blocked, GlanceModifier.fillMaxWidth().height(WidgetLayout.GRID_CELL_HEIGHT.dp), maxLines = 2)
                     }
                 }
             }
@@ -291,37 +297,42 @@ private fun PowerButton(
     }
 }
 
-/** On: the accent fill, like the app's filled button. Off: a plain tile with dimmed text. */
+/**
+ * On: the bulb's actual colour (one static colour per scene), with black or
+ * white text, whichever reads better. Off: a tile. Unreachable: sunk into the
+ * background with a dimmed name. Names wrap up to [maxLines] lines.
+ */
 @Composable
-private fun LightToggle(l: LightUi, c: WColors, blocked: Boolean, modifier: GlanceModifier) {
+private fun LightToggle(l: LightUi, c: WColors, blocked: Boolean, modifier: GlanceModifier, maxLines: Int) {
     val reachable = l.state.reachable && !blocked
-    val on = reachable && l.state.on
-    // On: accent fill. Off: a tile. Unreachable: sunk into the background with a dimmed name.
+    val bulb = if (blocked) null else WizColor.colorOf(l.state)
+    val on = bulb != null
+    fun cp(v: Int) = ColorProvider(Color(0xFF000000.toInt() or v))
     val fill = when {
-        on -> c.accent
+        bulb != null -> cp(bulb)
         reachable -> c.tile
         else -> c.offTile
     }
     val ink = when {
-        on -> c.onAccent
+        bulb != null -> cp(WizColor.inkOn(bulb))
         reachable -> c.sub
         else -> c.dim
     }
     val action = if (blocked) actionRunCallback<RefreshAction>() else actionRunCallback<ToggleAction>(actionParametersOf(MacKey to l.mac))
     Row(
-        modifier.background(fill).cornerRadius(10.dp).padding(horizontal = 8.dp).clickable(action),
+        modifier.background(fill).cornerRadius(10.dp).padding(horizontal = 8.dp, vertical = 4.dp).clickable(action),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (l.pending) {
             CircularProgressIndicator(GlanceModifier.size(16.dp), color = ink)
         } else {
-            Image(ImageProvider(Ic.forLight(l.light.icon)), null, GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(if (on) c.onAccent else c.dim))
+            Image(ImageProvider(Ic.forLight(l.light.icon)), null, GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(if (on) ink else c.dim))
         }
         Spacer(GlanceModifier.width(6.dp))
         Text(
             l.light.name,
             style = TextStyle(color = ink, fontSize = 12.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium),
-            maxLines = 1,
+            maxLines = maxLines,
         )
     }
 }

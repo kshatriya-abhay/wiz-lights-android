@@ -2,6 +2,7 @@ package io.github.kshatriyaabhay.wizlights.wiz
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Expected values computed by running the plugin's Model.js under Node. */
@@ -52,6 +53,29 @@ class ColorMathTest {
             val rgb = WizColor.hsvToRgb(h.toDouble(), s, 1.0)
             val back = WizColor.rgbToHsv(rgb.r, rgb.g, rgb.b)
             assertEquals(rgb, WizColor.hsvToRgb(back.h, back.s, 1.0))
+        }
+    }
+
+    @Test
+    fun colourOfALight() {
+        assertNull(WizColor.colorOf(LightState(reachable = true, on = false, rgb = listOf(255, 0, 0))))
+        assertNull(WizColor.colorOf(LightState(reachable = false, on = true)))
+        assertEquals(0xFF0000, WizColor.colorOf(LightState(reachable = true, on = true, rgb = listOf(255, 0, 0))))
+        assertEquals(0xFFA757, WizColor.colorOf(LightState(reachable = true, on = true, temp = 2700)))
+        assertEquals(0x1E88E5, WizColor.colorOf(LightState(reachable = true, on = true, sceneId = 1, rgb = listOf(1, 2, 3))))
+        assertEquals(Scenes.OTHER_SCENE_COLOR, WizColor.colorOf(LightState(reachable = true, on = true, sceneId = 12)))
+    }
+
+    @Test
+    fun inkIsReadable() {
+        assertEquals(0x1A1A1A, WizColor.inkOn(0xFFA757))
+        assertEquals(0x1A1A1A, WizColor.inkOn(0xFFFFFF))
+        assertEquals(0xFFFFFF, WizColor.inkOn(0x0000FF))
+        assertEquals(0xFFFFFF, WizColor.inkOn(0xC62828))
+        for (bg in listOf(0xFF0000, 0x00FF00, 0x0000FF, 0xFF00FF, 0x808080, 0xFFFF00, 0x1E88E5, 0xAB47BC)) {
+            val ink = WizColor.inkOn(bg)
+            val contrast = io.github.kshatriyaabhay.wizlights.theme.contrast(bg, ink)
+            assertTrue("ink on ${Integer.toHexString(bg)} is $contrast", contrast >= 3.0)
         }
     }
 }

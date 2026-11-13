@@ -76,6 +76,7 @@ class WizRepository(
     private val _pending = MutableStateFlow<Set<String>>(emptySet())
     private val _scanning = MutableStateFlow(false)
     private val _allBusy = MutableStateFlow(false)
+    private val _refreshing = MutableStateFlow(false)
     private val _gate = MutableStateFlow<Gate>(Gate.Allowed)
     private val _error = MutableStateFlow<String?>(null)
     private val _loaded = MutableStateFlow(false)
@@ -84,6 +85,8 @@ class WizRepository(
 
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
     val allBusy: StateFlow<Boolean> = _allBusy.asStateFlow()
+    /** True while a refresh the user asked for (app or widget button) runs. Polls don't set it. */
+    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
     val gate: StateFlow<Gate> = _gate.asStateFlow()
     val lastError: StateFlow<String?> = _error.asStateFlow()
     val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
@@ -183,6 +186,18 @@ class WizRepository(
     }
 
     // ───────────── Read ─────────────
+
+    /** A refresh the user asked for: re-reads the saved bulbs only, no network scan. */
+    suspend fun refreshNow() {
+        if (_refreshing.value) return
+        _refreshing.value = true
+        try {
+            checkGate(force = true)
+            refresh()
+        } finally {
+            _refreshing.value = false
+        }
+    }
 
     suspend fun refresh() {
         try {

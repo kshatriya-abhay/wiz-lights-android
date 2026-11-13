@@ -244,6 +244,7 @@ object Ic {
     val delete = R.drawable.ic_delete
     val edit = R.drawable.ic_edit
     val refresh = R.drawable.ic_refresh
+    val scan = R.drawable.ic_wifi_find
     val settings = R.drawable.ic_settings
     val power = R.drawable.ic_power_settings_new
     val wifi = R.drawable.ic_wifi

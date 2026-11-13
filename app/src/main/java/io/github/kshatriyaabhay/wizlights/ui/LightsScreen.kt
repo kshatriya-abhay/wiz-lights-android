@@ -90,6 +90,7 @@ fun LightsScreen(repo: WizRepository, onSettings: () -> Unit) {
     val lights by repo.lights.collectAsState()
     val scanning by repo.scanning.collectAsState()
     val allBusy by repo.allBusy.collectAsState()
+    val userRefreshing by repo.refreshing.collectAsState()
     val gate by repo.gate.collectAsState()
     val error by repo.lastError.collectAsState()
     val loaded by repo.loaded.collectAsState()
@@ -130,10 +131,15 @@ fun LightsScreen(repo: WizRepository, onSettings: () -> Unit) {
                             size = 13, color = Tn.sub,
                         )
                     }
+                    if (userRefreshing) {
+                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { Spinner(Modifier.size(18.dp)) }
+                    } else {
+                        SquareButton(Ic.refresh, "Refresh lights", { scope.launch { repo.refreshNow() } }, enabled = !blocked && !scanning)
+                    }
                     if (scanning) {
                         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { Spinner(Modifier.size(18.dp)) }
                     } else {
-                        SquareButton(Ic.refresh, "Scan for lights", { scope.launch { repo.scan() } }, enabled = !blocked)
+                        SquareButton(Ic.scan, "Scan network for new lights", { scope.launch { repo.scan() } }, enabled = !blocked)
                     }
                     SquareButton(Ic.settings, "Settings", onSettings)
                 }

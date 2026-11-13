@@ -105,6 +105,29 @@ object WizColor {
     /** "#RRGGBB" to 0xRRGGBB, or null. */
     fun hexToInt(hex: String?): Int? = hexToRgb(hex)?.let { (it.r shl 16) or (it.g shl 8) or it.b }
 
+    /**
+     * The colour a light is showing, as 0xRRGGBB, or null when it is off or
+     * unreachable: its RGB colour, the colour of its white temperature, or
+     * one static colour for a scene.
+     */
+    fun colorOf(s: LightState): Int? {
+        if (!s.reachable || !s.on) return null
+        return when (s.mode) {
+            Mode.Color -> s.rgb!!.let { (r, g, b) -> (r shl 16) or (g shl 8) or b }
+            Mode.Temp -> hexToInt(kelvinToHex(s.temp ?: 2700))
+            Mode.Scene -> Scenes.byId(s.sceneId)?.color ?: Scenes.OTHER_SCENE_COLOR
+            Mode.None -> hexToInt(kelvinToHex(2700))
+        }
+    }
+
+    /** Black or white, whichever reads better on [bg] (WCAG relative luminance). */
+    fun inkOn(bg: Int): Int {
+        fun lin(c: Int): Double { val v = c / 255.0; return if (v <= 0.03928) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4) }
+        val l = 0.2126 * lin((bg shr 16) and 255) + 0.7152 * lin((bg shr 8) and 255) + 0.0722 * lin(bg and 255)
+        // Contrast with black is (l + 0.05) / 0.05, with white 1.05 / (l + 0.05); they are equal at l ≈ 0.179.
+        return if (l > 0.179) 0x1A1A1A else 0xFFFFFF
+    }
+
     /** Rounds Kelvin to the nearest 100 and clamps to the bulb range. */
     fun clampTemp(k: Int): Int = ((k / 100.0).roundToInt() * 100).coerceIn(Limits.TEMP_MIN, Limits.TEMP_MAX)
 }

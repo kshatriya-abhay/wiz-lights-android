@@ -113,12 +113,7 @@ fun LightTile(
     LaunchedEffect(ui.mac, s.temp) { s.temp?.let { session.temp = it.coerceIn(Limits.TEMP_MIN, Limits.TEMP_MAX) } }
 
     val on = s.reachable && s.on
-    val bulbTint = when {
-        !on -> Tn.dim
-        s.mode == Mode.Color -> s.rgb!!.let { (r, g, b) -> androidx.compose.ui.graphics.Color(r, g, b) }
-        s.mode == Mode.Temp -> hexColor(WizColor.kelvinToHex(s.temp ?: 2700))
-        else -> Tn.accent
-    }
+    val bulbTint = WizColor.colorOf(s)?.let { androidx.compose.ui.graphics.Color(0xFF000000.toInt() or it) } ?: Tn.dim
 
     var renaming by remember { mutableStateOf(false) }
     var forgetting by remember { mutableStateOf(false) }
