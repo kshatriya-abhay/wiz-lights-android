@@ -397,6 +397,16 @@ class WizRepository(
         return ActionResult.Ok
     }
 
+    /** The edit dialog: a new name and icon in one save. */
+    suspend fun editLight(mac: String, name: String, icon: String): ActionResult {
+        ensureLoaded()
+        if (name.isBlank()) return fail("empty name")
+        val next = LightBook.setIcon(LightBook.rename(_lights.value, mac, name), mac, icon)
+        _lights.value = next
+        lightStore.save(next)
+        return ActionResult.Ok
+    }
+
     suspend fun forget(mac: String): ActionResult {
         ensureLoaded()
         val next = LightBook.forget(_lights.value, mac)

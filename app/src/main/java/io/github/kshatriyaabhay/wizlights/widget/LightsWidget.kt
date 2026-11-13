@@ -56,7 +56,8 @@ import io.github.kshatriyaabhay.wizlights.WizApp
 import io.github.kshatriyaabhay.wizlights.data.LightUi
 import io.github.kshatriyaabhay.wizlights.net.Gate
 import io.github.kshatriyaabhay.wizlights.theme.PaletteSpec
-import io.github.kshatriyaabhay.wizlights.theme.StockThemes
+import io.github.kshatriyaabhay.wizlights.ui.Ic
+import io.github.kshatriyaabhay.wizlights.ui.Themes
 import io.github.kshatriyaabhay.wizlights.ui.MainActivity
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -89,7 +90,7 @@ class LightsWidget : GlanceAppWidget() {
             val allBusy by repo.allBusy.collectAsState()
             val gate by repo.gate.collectAsState()
             val settings by repo.settings.collectAsState()
-            Content(lights, scanning, allBusy, gate, WColors(StockThemes.palette(settings.themeName)))
+            Content(lights, scanning, allBusy, gate, WColors(Themes.palette(context, settings.themeName)))
         }
     }
 }
@@ -320,7 +321,7 @@ private fun LightToggle(l: LightUi, c: WColors, blocked: Boolean, modifier: Glan
         if (l.pending) {
             CircularProgressIndicator(GlanceModifier.size(16.dp), color = ink)
         } else {
-            Image(ImageProvider(R.drawable.ic_bulb), null, GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(if (on) c.onAccent else c.dim))
+            Image(ImageProvider(Ic.forLight(l.light.icon)), null, GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(if (on) c.onAccent else c.dim))
         }
         Spacer(GlanceModifier.width(6.dp))
         Text(

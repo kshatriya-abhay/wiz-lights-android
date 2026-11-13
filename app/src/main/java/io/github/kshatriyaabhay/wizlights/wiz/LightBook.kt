@@ -12,7 +12,7 @@ object LightBook {
     /** Cleans one stored entry like clean_entry(): needs a mac and an ip; caps lengths. */
     fun clean(entry: Light): Light? {
         if (entry.mac.isEmpty() || entry.ip.isEmpty()) return null
-        return Light(entry.mac.capped(), entry.ip.capped(), entry.name.capped(), entry.moduleName.capped())
+        return Light(entry.mac.capped(), entry.ip.capped(), entry.name.capped(), entry.moduleName.capped(), LightIcon.clean(entry.icon))
     }
 
     /**
@@ -29,6 +29,7 @@ object LightBook {
                 ip = d.ip,
                 name = existing?.name?.takeIf { it.isNotEmpty() } ?: defaultName(d.moduleName, d.mac),
                 moduleName = d.moduleName.ifEmpty { existing?.moduleName.orEmpty() },
+                icon = existing?.icon ?: LightIcon.BULB,
             )
         }
         return byMac.keys.sorted().map { byMac.getValue(it) }.take(Limits.MAX_LIGHTS)
@@ -39,6 +40,9 @@ object LightBook {
         require(n.isNotEmpty()) { "empty name" }
         return lights.map { if (it.mac == mac) it.copy(name = n) else it }
     }
+
+    fun setIcon(lights: List<Light>, mac: String, icon: String): List<Light> =
+        lights.map { if (it.mac == mac) it.copy(icon = LightIcon.clean(icon)) else it }
 
     fun forget(lights: List<Light>, mac: String): List<Light> = lights.filter { it.mac != mac }
 

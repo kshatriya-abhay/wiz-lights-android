@@ -6,34 +6,40 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import io.github.kshatriyaabhay.wizlights.WizApp
-import io.github.kshatriyaabhay.wizlights.theme.StockThemes
 
 class MainActivity : ComponentActivity() {
-    private enum class Screen { Lights, Settings }
+    private enum class Screen { Lights, Settings, Themes }
 
     private var screen by mutableStateOf(Screen.Lights)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        if (savedInstanceState?.getString(KEY_SCREEN) == Screen.Settings.name) screen = Screen.Settings
+        savedInstanceState?.getString(KEY_SCREEN)?.let { s -> Screen.entries.firstOrNull { it.name == s } }?.let { screen = it }
         handle(intent)
         val repo = WizApp.of(this).repository
         setContent {
             val settings by repo.settings.collectAsState()
-            val palette = remember(settings.themeName) { StockThemes.palette(settings.themeName) }
+            // Material You follows the system's dark mode; the key makes it recompute on a switch.
+            val dark = isSystemInDarkTheme()
+            val palette = remember(settings.themeName, dark) { Themes.palette(this, settings.themeName) }
             WizTheme(palette) {
                 when (screen) {
                     Screen.Lights -> LightsScreen(repo, onSettings = { screen = Screen.Settings })
                     Screen.Settings -> {
                         BackHandler { screen = Screen.Lights }
-                        SettingsScreen(repo, onBack = { screen = Screen.Lights })
+                        SettingsScreen(repo, onBack = { screen = Screen.Lights }, onThemes = { screen = Screen.Themes })
+                    }
+                    Screen.Themes -> {
+                        BackHandler { screen = Screen.Settings }
+                        ThemesScreen(repo, onBack = { screen = Screen.Settings })
                     }
                 }
             }

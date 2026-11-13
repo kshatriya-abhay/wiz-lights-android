@@ -8,7 +8,10 @@ object StockThemes {
     private fun theme(name: String, dark: Boolean, vararg colors: Pair<String, String>) =
         OmarchyTheme(name, dark, colors.associate { (k, v) -> k to OmarchyTheme.parseColor(v)!! })
 
-    const val DEFAULT = "tokyo-night"
+    const val DEFAULT = "catppuccin"
+
+    /** Not a stock theme: the app builds it from the system wallpaper colours (Android 12+). */
+    const val MATERIAL_YOU = "material-you"
 
     val all: List<OmarchyTheme> = listOf(
     theme("catppuccin", true, "background" to "#1e1e2e", "foreground" to "#cdd6f4", "lighter_background" to "#313244", "dark_background" to "#161622", "darker_background" to "#101019", "muted" to "#585b70", "accent" to "#89b4fa", "red" to "#f38ba8", "green" to "#a6e3a1", "yellow" to "#f9e2af", "orange" to "#f6b6ab", "cyan" to "#94e2d5", "blue" to "#89b4fa", "magenta" to "#f5c2e7", "bright_blue" to "#89b4fa", "bright_cyan" to "#94e2d5", "bright_magenta" to "#f5c2e7"),
@@ -36,6 +39,9 @@ object StockThemes {
     theme("white", false, "background" to "#ffffff", "foreground" to "#000000", "lighter_background" to "#c0c0c0", "dark_background" to "#f5f5f5", "darker_background" to "#e8e8e8", "muted" to "#808080", "accent" to "#6e6e6e", "red" to "#2a2a2a", "green" to "#3a3a3a", "yellow" to "#4a4a4a", "cyan" to "#3e3e3e", "blue" to "#1a1a1a", "magenta" to "#2e2e2e", "bright_blue" to "#1a1a1a", "bright_cyan" to "#3e3e3e", "bright_magenta" to "#2e2e2e"),
     )
 
+    /** The selected theme's name as the picker shows it: Material You stays itself, an unknown name is the default. */
+    fun byNameOrMaterialYou(name: String?): String = if (name == MATERIAL_YOU) name else byName(name).name
+
     fun byName(name: String?): OmarchyTheme = all.firstOrNull { it.name == name } ?: all.first { it.name == DEFAULT }
 
     private val palettes = HashMap<String, PaletteSpec>()
@@ -44,9 +50,9 @@ object StockThemes {
     @Synchronized
     fun palette(name: String?): PaletteSpec {
         val t = byName(name)
-        return palettes.getOrPut(t.name) { if (t.name == DEFAULT) TokyoNight else paletteOf(t) }
+        return palettes.getOrPut(t.name) { if (t.name == "tokyo-night") TokyoNight else paletteOf(t) }
     }
 
     /** "catppuccin-latte" -> "Catppuccin Latte". */
-    fun displayName(name: String): String = name.split('-').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
+    fun displayName(name: String): String = if (name == MATERIAL_YOU) "Material You" else name.split('-').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
 }

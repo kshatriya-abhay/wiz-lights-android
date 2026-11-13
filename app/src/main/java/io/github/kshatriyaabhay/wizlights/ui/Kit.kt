@@ -251,6 +251,11 @@ object Ic {
     val info = R.drawable.ic_info
     val warning = R.drawable.ic_warning
     val bulb = R.drawable.ic_bulb
+    val lamp = R.drawable.ic_lamp
+    val chevron = R.drawable.ic_chevron_right
+
+    /** The drawable for a light's chosen icon. */
+    fun forLight(icon: String): Int = if (icon == io.github.kshatriyaabhay.wizlights.wiz.LightIcon.LAMP) lamp else bulb
 }
 
 @Composable

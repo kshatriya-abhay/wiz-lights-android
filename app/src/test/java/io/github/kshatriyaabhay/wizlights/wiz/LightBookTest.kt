@@ -46,4 +46,16 @@ class LightBookTest {
         val l = listOf(Light("c", "", "bedroom"), Light("b", "", "Attic"), Light("a", "", "Bedroom"))
         assertEquals(listOf("b", "a", "c"), LightBook.displayOrder(l).map { it.mac })
     }
+
+    @Test
+    fun iconSurvivesMergeAndStorage() {
+        val saved = LightBook.setIcon(listOf(Light("a", "1", "Desk")), "a", LightIcon.LAMP)
+        assertEquals(LightIcon.LAMP, LightBook.merge(saved, listOf(Discovered("a", "2", "M")))[0].icon)
+        assertEquals(LightIcon.BULB, LightBook.setIcon(saved, "a", "rocket")[0].icon)
+        val json = io.github.kshatriyaabhay.wizlights.data.LightStore.encode(saved)
+        assertEquals(saved, io.github.kshatriyaabhay.wizlights.data.LightStore.decode(json))
+        // A plain plugin entry has no icon and reads as a bulb.
+        val plain = io.github.kshatriyaabhay.wizlights.data.LightStore.encode(listOf(Light("b", "1")))
+        assertEquals(false, plain.toString().contains("icon"))
+    }
 }

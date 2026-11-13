@@ -41,7 +41,9 @@ class StockThemesTest {
     fun darkFlagFollowsTheTheme() {
         assertEquals(false, StockThemes.palette("catppuccin-latte").dark)
         assertEquals(true, StockThemes.palette("nord").dark)
-        assertEquals("tokyo-night", StockThemes.byName("nope").name)
+        assertEquals("catppuccin", StockThemes.byName("nope").name)
+        assertEquals("material-you", StockThemes.byNameOrMaterialYou("material-you"))
+        assertEquals("Material You", StockThemes.displayName("material-you"))
         assertEquals("Catppuccin Latte", StockThemes.displayName("catppuccin-latte"))
     }
 }

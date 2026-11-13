@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.kshatriyaabhay.wizlights.data.LightUi
 import io.github.kshatriyaabhay.wizlights.data.WizRepository
+import io.github.kshatriyaabhay.wizlights.wiz.LightIcon
 import io.github.kshatriyaabhay.wizlights.wiz.Limits
 import io.github.kshatriyaabhay.wizlights.wiz.Mode
 import io.github.kshatriyaabhay.wizlights.wiz.Preset
@@ -138,14 +139,14 @@ fun LightTile(
                 .padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Sym(Ic.bulb, null, tint = bulbTint, size = 26.dp)
+            Sym(Ic.forLight(ui.light.icon), null, tint = bulbTint, size = 26.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 T(ui.light.name, size = 15, weight = FontWeight.SemiBold, maxLines = 1)
                 T(metaText(ui), size = 12, color = Tn.sub, family = Mono, maxLines = 1)
             }
             if (expanded) {
-                IconButton(onClick = { renaming = true }) { Sym(Ic.edit, "Rename ${ui.light.name}", tint = Tn.sub, size = 20.dp) }
+                IconButton(onClick = { renaming = true }) { Sym(Ic.edit, "Edit ${ui.light.name}", tint = Tn.sub, size = 20.dp) }
                 Box {
                     IconButton(onClick = { menu = true }) { Sym(Ic.more, "More for ${ui.light.name}", tint = Tn.sub, size = 20.dp) }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Tn.tileHi) {
@@ -188,9 +189,9 @@ fun LightTile(
         }
     }
 
-    if (renaming) RenameDialog(ui.light.name, onDismiss = { renaming = false }) { name ->
+    if (renaming) EditLightDialog(ui.light.name, ui.light.icon, bulbTint, onDismiss = { renaming = false }) { name, icon ->
         renaming = false
-        scope.launch { repo.rename(ui.mac, name) }
+        scope.launch { repo.editLight(ui.mac, name, icon) }
     }
     if (forgetting) {
         AlertDialog(
@@ -375,27 +376,50 @@ private fun ExpandedControls(ui: LightUi, session: TileSession, enabled: Boolean
     }
 }
 
+/** Edit a light: its name and its icon (bulb or lamp). The preview shows the bulb's current colour. */
 @Composable
-fun RenameDialog(current: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+fun EditLightDialog(
+    current: String,
+    currentIcon: String,
+    tint: androidx.compose.ui.graphics.Color,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit,
+) {
     var text by remember { mutableStateOf(current) }
+    var icon by remember { mutableStateOf(currentIcon) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Tn.tileHi,
-        title = { T("Rename light", size = 18, weight = FontWeight.SemiBold) },
+        title = { T("Edit light", size = 18, weight = FontWeight.SemiBold) },
         text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it.take(Limits.MAX_FIELD_LEN) },
-                singleLine = true,
-                label = { Text("Name") },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Tn.accent, unfocusedBorderColor = Tn.dim,
-                    focusedLabelColor = Tn.accent, unfocusedLabelColor = Tn.sub,
-                    focusedTextColor = Tn.text, unfocusedTextColor = Tn.text, cursorColor = Tn.accent,
-                ),
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(Limits.MAX_FIELD_LEN) },
+                    singleLine = true,
+                    label = { Text("Name") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Tn.accent, unfocusedBorderColor = Tn.dim,
+                        focusedLabelColor = Tn.accent, unfocusedLabelColor = Tn.sub,
+                        focusedTextColor = Tn.text, unfocusedTextColor = Tn.text, cursorColor = Tn.accent,
+                    ),
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TileLabel("Icon")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for ((id, label) in listOf(LightIcon.BULB to "Bulb", LightIcon.LAMP to "Lamp")) {
+                            ChoiceChip(
+                                label = label,
+                                selected = icon == id,
+                                onClick = { icon = id },
+                                leading = { Sym(Ic.forLight(id), null, tint = tint, size = 20.dp) },
+                            )
+                        }
+                    }
+                }
+            }
         },
-        confirmButton = { WizButton("Save", { onSave(text.trim()) }, enabled = text.isNotBlank(), kind = ButtonKind.Text) },
+        confirmButton = { WizButton("Save", { onSave(text.trim(), icon) }, enabled = text.isNotBlank(), kind = ButtonKind.Text) },
         dismissButton = { WizButton("Cancel", onDismiss, kind = ButtonKind.Text) },
     )
 }

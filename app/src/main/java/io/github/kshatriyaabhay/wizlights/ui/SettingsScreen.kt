@@ -74,7 +74,7 @@ private val PollChoices = listOf(5 to "5 s", 15 to "15 s", 30 to "30 s", 60 to "
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen(repo: WizRepository, onBack: () -> Unit) {
+fun SettingsScreen(repo: WizRepository, onBack: () -> Unit, onThemes: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by repo.settings.collectAsState()
@@ -127,18 +127,15 @@ fun SettingsScreen(repo: WizRepository, onBack: () -> Unit) {
 
             // Theme
             SectionLabel("Theme")
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val cols = if (maxWidth >= 480.dp) 3 else 2
-                val cardWidth = (maxWidth - TileGap * (cols - 1)) / cols
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(TileGap), verticalArrangement = Arrangement.spacedBy(TileGap)) {
-                    for (t in StockThemes.all) {
-                        ThemeCard(
-                            name = t.name,
-                            palette = StockThemes.palette(t.name),
-                            selected = settings.themeName == t.name,
-                            modifier = Modifier.width(cardWidth),
-                        ) { scope.launch { store.setTheme(t.name) } }
+            val current = Themes.palette(context, settings.themeName)
+            Tile(Modifier.fillMaxWidth(), onClick = onThemes) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        T(StockThemes.displayName(StockThemes.byNameOrMaterialYou(settings.themeName)), weight = FontWeight.Medium)
+                        Spacer(Modifier.height(6.dp))
+                        Swatches(current)
                     }
+                    Sym(Ic.chevron, "Choose theme", tint = Tn.sub, size = 22.dp)
                 }
             }
 
@@ -259,9 +256,55 @@ private fun PermissionLine(label: String, ok: Boolean, action: String?, onAction
     }
 }
 
+@Composable
+private fun Swatches(palette: PaletteSpec) {
+    fun c(v: Int) = Color(0xFF000000.toInt() or v)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (v in listOf(palette.accent, palette.green, palette.yellow, palette.red)) {
+            Box(Modifier.size(14.dp).clip(CircleShape).background(c(v)))
+        }
+    }
+}
+
+/** The theme picker: Material You (Android 12+) first, then the stock Omarchy themes. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ThemesScreen(repo: WizRepository, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val settings by repo.settings.collectAsState()
+    Column(
+        Modifier.fillMaxSize().background(Tn.bg).windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(horizontal = Gutter).padding(bottom = 24.dp)) {
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                SquareButton(Ic.back, "Back", onBack)
+                Spacer(Modifier.width(TileGap))
+                T("Theme", Modifier.semantics { heading() }, size = 18, weight = FontWeight.SemiBold)
+            }
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val cols = if (maxWidth >= 480.dp) 3 else 2
+                val cardWidth = (maxWidth - TileGap * (cols - 1)) / cols
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(TileGap), verticalArrangement = Arrangement.spacedBy(TileGap)) {
+                    for (name in Themes.names) {
+                        ThemeCard(
+                            name = name,
+                            palette = Themes.palette(context, name),
+                            selected = StockThemes.byNameOrMaterialYou(settings.themeName) == name,
+                            subtitle = if (name == StockThemes.MATERIAL_YOU) "From your wallpaper" else null,
+                            modifier = Modifier.width(cardWidth),
+                        ) { scope.launch { repo.settingsStore.setTheme(name) } }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** A swatch card drawn in its own palette. */
 @Composable
-private fun ThemeCard(name: String, palette: PaletteSpec, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun ThemeCard(name: String, palette: PaletteSpec, selected: Boolean, subtitle: String?, modifier: Modifier, onClick: () -> Unit) {
     fun c(v: Int) = Color(0xFF000000.toInt() or v)
     Tile(
         modifier,
@@ -271,11 +314,8 @@ private fun ThemeCard(name: String, palette: PaletteSpec, selected: Boolean, mod
         padding = PaddingValues(12.dp),
     ) {
         T(StockThemes.displayName(name), size = 13, color = c(palette.text), weight = FontWeight.SemiBold, maxLines = 1)
+        if (subtitle != null) T(subtitle, size = 11, color = c(palette.sub), maxLines = 1)
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (v in listOf(palette.accent, palette.green, palette.yellow, palette.red)) {
-                Box(Modifier.size(14.dp).clip(CircleShape).background(c(v)))
-            }
-        }
+        Swatches(palette)
     }
 }

@@ -2,6 +2,7 @@ package io.github.kshatriyaabhay.wizlights.data
 
 import io.github.kshatriyaabhay.wizlights.wiz.Light
 import io.github.kshatriyaabhay.wizlights.wiz.LightBook
+import io.github.kshatriyaabhay.wizlights.wiz.LightIcon
 import io.github.kshatriyaabhay.wizlights.wiz.LightState
 import io.github.kshatriyaabhay.wizlights.wiz.Limits
 import io.github.kshatriyaabhay.wizlights.wiz.Preset
@@ -74,7 +75,7 @@ class LightStore(dir: File) {
             val arr = ((root as? JsonObject)?.get("lights") as? JsonArray) ?: return emptyList()
             return arr.take(Limits.MAX_LIGHTS).mapNotNull { e ->
                 val o = e as? JsonObject ?: return@mapNotNull null
-                LightBook.clean(Light(o.str("mac"), o.str("ip"), o.str("name"), o.str("moduleName")))
+                LightBook.clean(Light(o.str("mac"), o.str("ip"), o.str("name"), o.str("moduleName"), LightIcon.clean(o.str("icon"))))
             }
         }
 
@@ -83,6 +84,7 @@ class LightStore(dir: File) {
                 lights.take(Limits.MAX_LIGHTS).mapNotNull(LightBook::clean).forEach { l ->
                     add(buildJsonObject {
                         put("mac", l.mac); put("ip", l.ip); put("name", l.name); put("moduleName", l.moduleName)
+                        if (l.icon != LightIcon.BULB) put("icon", l.icon)
                     })
                 }
             })

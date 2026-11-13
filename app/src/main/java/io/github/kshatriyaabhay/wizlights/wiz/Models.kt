@@ -33,7 +33,17 @@ data class Light(
     val ip: String,
     val name: String = "",
     val moduleName: String = "",
+    /** The icon in the app and the widget: [LightIcon.BULB] or [LightIcon.LAMP]. The plugin ignores this field. */
+    val icon: String = LightIcon.BULB,
 )
+
+object LightIcon {
+    const val BULB = "bulb"
+    const val LAMP = "lamp"
+    val all = listOf(BULB, LAMP)
+
+    fun clean(v: String?): String = if (v in all) v!! else BULB
+}
 
 /** A bulb that answered a discovery broadcast. */
 data class Discovered(val mac: String, val ip: String, val moduleName: String)

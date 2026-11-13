@@ -74,7 +74,7 @@ class WizApp : Application() {
         // The widget redraws when anything it shows changes: names, on/off, reachability, busy flags, theme.
         scope.launch {
             combine(repo.lights, repo.scanning, repo.allBusy, repo.gate, repo.settings) { lights, scanning, busy, gate, settings ->
-                listOf(lights.map { listOf(it.mac, it.light.name, it.state.on, it.state.reachable, it.pending) }, scanning, busy, gate, settings.themeName)
+                listOf(lights.map { listOf(it.mac, it.light.name, it.light.icon, it.state.on, it.state.reachable, it.pending) }, scanning, busy, gate, settings.themeName)
             }.distinctUntilChanged().drop(1).debounce(250).collect {
                 runCatching { LightsWidget().updateAll(this@WizApp) }
             }
