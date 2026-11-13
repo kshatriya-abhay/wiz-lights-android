@@ -136,7 +136,7 @@ fun LightsScreen(repo: WizRepository, onSettings: () -> Unit) {
                         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { Spinner(Modifier.size(18.dp)) }
                     } else {
                         SquareButton(Ic.refresh, "Refresh lights", {
-                            Toast.makeText(context, "Checking saved bulbs…", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Refreshing bulb state…", Toast.LENGTH_SHORT).show()
                             scope.launch { repo.refreshNow() }
                         }, enabled = !blocked && !scanning)
                     }
