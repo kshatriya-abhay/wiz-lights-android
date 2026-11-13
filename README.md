@@ -27,7 +27,7 @@ for the Omarchy shell, and uses the same `lights.json` / `presets.json` formats.
 
 ## Install
 
-Download `wiz-lights-v1.0.apk` from [Releases](../../releases) and open it on the phone (allow installing
+Download the APK from the [latest release](../../releases/latest) and open it on the phone (allow installing
 from your browser or file manager when Android asks). Android 10 or newer.
 
 Release APKs are signed with this certificate (SHA-256):
@@ -36,7 +36,7 @@ Release APKs are signed with this certificate (SHA-256):
 1b:08:d3:7f:31:5d:0e:e2:ee:dd:50:99:f4:0f:81:83:13:db:f4:7b:2e:ea:27:c2:6d:74:83:17:3d:b3:14:0b
 ```
 
-Check a download with `apksigner verify --print-certs wiz-lights-v1.0.apk`. A debug build you made
+Check a download with `apksigner verify --print-certs <apk>`. A debug build you made
 yourself is signed with a different key, so uninstall it first; that removes the saved lights.
 
 ## Local network only
@@ -78,7 +78,7 @@ The version is set in `app/build.gradle.kts` (`versionName`, `versionCode`).
 - `./gradlew assembleStaging` builds the R8-shrunk release as `io.github.kshatriyaabhay.wizlights.staging`, signed with the debug key and installable next to the debug app, to smoke-test the release build.
 - A signed release reads `keystore.properties` in the project root (git-ignored: `storeFile`, `storePassword`, `keyAlias`, `keyPassword`) or the `SIGNING_STORE_FILE`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS` and `SIGNING_KEY_PASSWORD` environment variables. Without them, `assembleRelease` produces an unsigned APK.
 - Releases are built and signed locally; the key is not stored on GitHub. `.github/workflows/ci.yml` only runs the tests and lint on pushes to `main` and on pull requests.
-- Publish: tag the commit (`git tag -a v1.0`), push the tag, and attach the APK as `wiz-lights-v1.0.apk` with its SHA-256 (`gh release create v1.0 wiz-lights-v1.0.apk`).
+- Publish: tag the commit (`git tag -a vX.Y`), push the tag, and attach the APK as `wiz-lights-vX.Y.apk` with its SHA-256 (`gh release create vX.Y wiz-lights-vX.Y.apk`).
 
 Check a release APK before publishing:
 
@@ -106,6 +106,17 @@ The emulator can't reach LAN broadcast, so these are checked on a real phone:
 7. Wi-Fi restriction: an allowed SSID works; another SSID blocks app and widget; declining background location shows the widget's "Open app" state.
 8. Widget at 2×1, 3×1, 5×1, 2×2, 4×2, 4×4; taps work with the app swiped away and after a reboot.
 9. Each theme: Lights screen, an expanded light, Settings, widget.
+
+## Credits
+
+- [kek's WiZ Light Controller](https://github.com/kek353/philipswizlightcontroller) (GPL-3.0): the original
+  WiZ local UDP protocol reference and colour engine that this app's protocol code is derived from, by way
+  of the Omarchy plugin.
+- [WiZ Lights plugin for Omarchy](https://github.com/kshatriya-abhay/omarchy-wiz-lights-plugin): the protocol
+  logic, storage formats, presets and colour math are ported from it.
+- [Flux](https://github.com/bjarneo/flux) by Bjarne Oeverli (MIT): theme engine, UI style and icons.
+- [Omarchy](https://github.com/basecamp/omarchy): the stock theme colours.
+- Icons from [Material Symbols](https://github.com/google/material-design-icons) and [Lucide](https://lucide.dev).
 
 ## License
 
