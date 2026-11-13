@@ -75,7 +75,7 @@ class WizRepository(
     private val _presets = MutableStateFlow<Map<String, List<Preset>>>(emptyMap())
     private val _pending = MutableStateFlow<Set<String>>(emptySet())
     private val _scanning = MutableStateFlow(false)
-    private val _allBusy = MutableStateFlow(false)
+    private val _allBusy = MutableStateFlow<Boolean?>(null)
     private val _refreshing = MutableStateFlow(false)
     private val _gate = MutableStateFlow<Gate>(Gate.Allowed)
     private val _error = MutableStateFlow<String?>(null)
@@ -84,7 +84,8 @@ class WizRepository(
     private val _scanFoundNothing = MutableStateFlow(false)
 
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
-    val allBusy: StateFlow<Boolean> = _allBusy.asStateFlow()
+    /** While All on / All off runs: true for All on, false for All off; null when idle. */
+    val allBusy: StateFlow<Boolean?> = _allBusy.asStateFlow()
     /** True while a refresh the user asked for (app or widget button) runs. Polls don't set it. */
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
     val gate: StateFlow<Gate> = _gate.asStateFlow()
@@ -291,7 +292,7 @@ class WizRepository(
     suspend fun setAllPower(on: Boolean): ActionResult = gated {
         val lights = _lights.value
         if (lights.isEmpty()) return ActionResult.Ok
-        _allBusy.value = true
+        _allBusy.value = on
         val macs = lights.map { it.mac }.toSet()
         _states.update { cur -> cur.mapValues { (mac, s) -> if (mac in macs && s.reachable) s.copy(on = on) else s } }
         _pending.update { it + macs }
@@ -299,7 +300,7 @@ class WizRepository(
             tracked { client.setAll(lights, on) }
         } finally {
             _pending.update { it - macs }
-            _allBusy.value = false
+            _allBusy.value = null
         }
         refresh()
         if (failed.isEmpty()) ActionResult.Ok else fail("${failed.size} of ${lights.size} bulbs failed to respond")

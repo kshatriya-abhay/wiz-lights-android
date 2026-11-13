@@ -33,6 +33,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -390,15 +395,23 @@ fun WizButton(
 
 /** A 40 dp square icon button for top bars, with a 48 dp touch target. */
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun SquareButton(@DrawableRes icon: Int, description: String, onClick: () -> Unit, enabled: Boolean = true) {
-    FilledTonalIconButton(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(8.dp),
-        colors = IconButtonDefaults.filledTonalIconButtonColors(
-            containerColor = Tn.tile, contentColor = Tn.text, disabledContainerColor = Tn.tile, disabledContentColor = Tn.dim,
-        ),
-    ) { Sym(icon, description, size = 20.dp) }
+    // The description doubles as a tooltip, shown on long-press or mouse hover.
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip(containerColor = Tn.tileHi, contentColor = Tn.text) { Text(description) } },
+        state = rememberTooltipState(),
+    ) {
+        FilledTonalIconButton(
+            onClick = onClick,
+            enabled = enabled,
+            shape = RoundedCornerShape(8.dp),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = Tn.tile, contentColor = Tn.text, disabledContainerColor = Tn.tile, disabledContentColor = Tn.dim,
+            ),
+        ) { Sym(icon, description, size = 20.dp) }
+    }
 }
 
 @Composable

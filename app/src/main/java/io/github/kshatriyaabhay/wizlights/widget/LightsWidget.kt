@@ -153,7 +153,7 @@ private fun openApp(context: Context, settings: Boolean = false): Action =
 // ───────────── Content ─────────────
 
 @Composable
-private fun Content(lights: List<LightUi>, scanning: Boolean, refreshing: Boolean, allBusy: Boolean, gate: Gate, c: WColors) {
+private fun Content(lights: List<LightUi>, scanning: Boolean, refreshing: Boolean, allBusy: Boolean?, gate: Gate, c: WColors) {
     val context = androidx.glance.LocalContext.current
     val size = LocalSize.current
     val tall = size.height.value >= WidgetLayout.TALL
@@ -197,8 +197,8 @@ private fun Content(lights: List<LightUi>, scanning: Boolean, refreshing: Boolea
         Row(modifier, verticalAlignment = Alignment.CenterVertically) {
             val inline = plan.inlineToggles > 0
             val bw = if (inline) GlanceModifier.width(WidgetLayout.COMPACT_BUTTON.dp) else GlanceModifier.defaultWeight()
-            PowerButton(true, plan.shortLabels, allBusy, blocked, c, onAction, bw.fillMaxHeight())
-            PowerButton(false, plan.shortLabels, allBusy, blocked, c, offAction, bw.fillMaxHeight().padding(start = gap))
+            PowerButton(true, plan.shortLabels, allBusy == true, blocked, c, onAction, bw.fillMaxHeight())
+            PowerButton(false, plan.shortLabels, allBusy == false, blocked, c, offAction, bw.fillMaxHeight().padding(start = gap))
             if (inline) {
                 for (l in lights.take(plan.inlineToggles)) {
                     Box(GlanceModifier.defaultWeight().fillMaxHeight().padding(start = gap)) {

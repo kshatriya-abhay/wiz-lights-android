@@ -181,12 +181,12 @@ fun LightsScreen(repo: WizRepository, onSettings: () -> Unit) {
                                     T("All lights", Modifier.weight(1f), size = 15, weight = FontWeight.SemiBold)
                                     WizButton("All on", {
                                         scope.launch { repo.setAllPower(true) }
-                                    }, enabled = !blocked, busy = allBusy)
+                                    }, enabled = !blocked && allBusy == null, busy = allBusy == true)
                                     Spacer(Modifier.size(TileGap))
                                     WizButton("All off", {
                                         expanded = null
                                         scope.launch { repo.setAllPower(false) }
-                                    }, kind = ButtonKind.Tonal, enabled = !blocked && !allBusy)
+                                    }, kind = ButtonKind.Tonal, enabled = !blocked && allBusy == null, busy = allBusy == false)
                                 }
                             }
                         }
