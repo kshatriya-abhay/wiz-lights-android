@@ -297,7 +297,7 @@ class WizRepository(
         _states.update { cur -> cur.mapValues { (mac, s) -> if (mac in macs && s.reachable) s.copy(on = on) else s } }
         _pending.update { it + macs }
         val failed = try {
-            tracked { client.setAll(lights, on) }
+            tracked { client.setAll(lights, on) }.also { DebugLog.d("setAll on=$on failed=${it.map { m -> m.takeLast(4) }} fg=${isForeground()}") }
         } finally {
             _pending.update { it - macs }
             _allBusy.value = null

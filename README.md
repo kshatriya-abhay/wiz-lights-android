@@ -43,9 +43,20 @@ Requires JDK 17–21 and the Android SDK (platform 37.2).
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Release builds are signed when `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`
-are all set; `WIZ_VERSION` and `WIZ_VERSION_CODE` set the version. `.github/workflows/release.yml`
-builds, tests and attaches the signed APK to a `v*` tag's GitHub release.
+### Release
+
+The version is set in `app/build.gradle.kts` (`versionName`, `versionCode`).
+
+- `./gradlew assembleStaging` builds the R8-shrunk release as `io.github.kshatriyaabhay.wizlights.staging`, signed with the debug key and installable next to the debug app, to smoke-test the release build.
+- A signed release reads `keystore.properties` in the project root (git-ignored: `storeFile`, `storePassword`, `keyAlias`, `keyPassword`) or the `SIGNING_STORE_FILE`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS` and `SIGNING_KEY_PASSWORD` environment variables. Without them, `assembleRelease` produces an unsigned APK.
+- `.github/workflows/release.yml` runs the tests and lint on every push and pull request. On a `v*` tag it can build and attach a signed APK if the repository has the secrets `KEYSTORE_BASE64`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS` and `SIGNING_KEY_PASSWORD`.
+
+Check a release APK before publishing:
+
+```sh
+java -jar ~/Android/Sdk/build-tools/37.0.0/lib/apksigner.jar verify --print-certs app/build/outputs/apk/release/app-release.apk
+~/Android/Sdk/build-tools/37.0.0/aapt2 dump badging app/build/outputs/apk/release/app-release.apk | grep -E "^package|application-label"
+```
 
 ## Troubleshooting discovery
 

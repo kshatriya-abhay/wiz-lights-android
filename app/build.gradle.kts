@@ -4,16 +4,16 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Release signing: set all four or none. Never commit a keystore or a password.
-val releaseKeystore = providers.environmentVariable("KEYSTORE_FILE").orNull
-val releaseStorePassword = providers.environmentVariable("KEYSTORE_PASSWORD").orNull
-val releaseKeyAlias = providers.environmentVariable("KEY_ALIAS").orNull
-val releaseKeyPassword = providers.environmentVariable("KEY_PASSWORD").orNull
-val releaseCredentials = listOf(releaseKeystore, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
-require(releaseCredentials.all { it.isNullOrBlank() } || releaseCredentials.all { !it.isNullOrBlank() }) {
-    "Set KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD together."
+import java.util.Properties
+
+// Release signing: keystore.properties in the project root (git-ignored: storeFile, storePassword,
+// keyAlias, keyPassword), or the SIGNING_STORE_FILE, SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS and
+// SIGNING_KEY_PASSWORD environment variables. Without either, release builds are unsigned.
+val keystoreProperties = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
 }
-val appVersionCode = providers.environmentVariable("WIZ_VERSION_CODE").orElse("1").get().toInt()
+fun signingValue(property: String, variable: String): String? =
+    keystoreProperties.getProperty(property) ?: providers.environmentVariable(variable).orNull
 
 android {
     namespace = "io.github.kshatriyaabhay.wizlights"
@@ -27,27 +27,36 @@ android {
         applicationId = "io.github.kshatriyaabhay.wizlights"
         minSdk = 29
         targetSdk = 36
-        versionCode = appVersionCode
-        versionName = providers.environmentVariable("WIZ_VERSION").orElse("0.1.0").get()
+        versionCode = 10
+        versionName = "1.0"
     }
 
     signingConfigs {
-        if (!releaseKeystore.isNullOrBlank()) {
+        val storeFile = signingValue("storeFile", "SIGNING_STORE_FILE")
+        if (storeFile != null) {
             create("release") {
-                storeFile = rootProject.file(releaseKeystore)
-                storePassword = releaseStorePassword
-                keyAlias = releaseKeyAlias
-                keyPassword = releaseKeyPassword
+                this.storeFile = file(storeFile)
+                storePassword = signingValue("storePassword", "SIGNING_STORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "SIGNING_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "SIGNING_KEY_PASSWORD")
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.findByName("release")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // The release build (R8-shrunk, no debug logs) signed with the debug key and installable
+        // next to the debug app, to smoke-test what R8 does before a signed release.
+        create("staging") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".staging"
+            matchingFallbacks += "release"
         }
     }
 

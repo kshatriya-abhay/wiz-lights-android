@@ -35,12 +35,10 @@ jobs:
       - name: Signed release APK
         if: startsWith(github.ref, 'refs/tags/v')
         env:
-          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          WIZ_VERSION: ${{ github.ref_name }}
-          WIZ_VERSION_CODE: ${{ github.run_number }}
+          SIGNING_STORE_FILE: ${{ runner.temp }}/release.jks
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           ./gradlew assembleRelease
           cp app/build/outputs/apk/release/app-release.apk "wiz-lights-${GITHUB_REF_NAME}.apk"
