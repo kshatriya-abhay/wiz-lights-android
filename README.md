@@ -17,7 +17,7 @@ for the Omarchy shell, and uses the same `lights.json` / `presets.json` formats.
 Android requires the `INTERNET` permission for any socket, including UDP on the LAN. The app enforces
 "local only" in code:
 
-- every socket is bound to the Wi-Fi or Ethernet network (never cellular, and not through a VPN),
+- every socket is bound to the Wi-Fi or Ethernet network, never cellular. When a VPN covers the app, Android refuses that binding, and the socket follows the system routes instead (VPN apps normally route the LAN directly),
 - every packet goes to, and every reply must come from, an address on that network's subnet or `255.255.255.255` (`net/AddressGuard.kt`),
 - IP addresses are parsed as literals; no hostname is ever resolved,
 - no HTTP library, analytics or crash reporting; a unit test fails the build if one appears on the classpath,
