@@ -62,15 +62,20 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-/** The meta line: "module · ip · -61 dBm", or "offline · ip". */
+private fun signalText(l: LightUi): String? = l.state.rssi?.takeIf { it != 0 }?.let { "$it dBm" }
+
+/** The meta line: "ip · -61 dBm", or "offline · ip". The model is listed under Details when expanded. */
 fun metaText(l: LightUi): String {
     if (!l.state.reachable) return "offline · ${l.light.ip}"
-    val parts = mutableListOf<String>()
-    if (l.light.moduleName.isNotEmpty()) parts += l.light.moduleName
-    if (l.light.ip.isNotEmpty()) parts += l.light.ip
-    l.state.rssi?.takeIf { it != 0 }?.let { parts += "$it dBm" }
-    return parts.joinToString(" · ")
+    return listOfNotNull(l.light.ip.ifEmpty { null }, signalText(l)).joinToString(" · ")
 }
+
+/** Label and value rows for the Details section of an expanded light. */
+fun detailRows(l: LightUi): List<Pair<String, String>> = listOfNotNull(
+    l.light.moduleName.ifEmpty { null }?.let { "Model" to it },
+    l.light.ip.ifEmpty { null }?.let { "IP address" to it },
+    signalText(l)?.let { "Signal strength" to it },
+)
 
 /** Per-tile UI state that lives only for this session, as in the plugin's uiState. */
 private class TileSession {
@@ -138,7 +143,8 @@ fun LightTile(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 T(ui.light.name, size = 15, weight = FontWeight.SemiBold, maxLines = 1)
-                T(metaText(ui), size = 12, color = Tn.sub, family = Mono, maxLines = 1)
+                // Expanded, the same facts are listed in full under Details instead.
+                if (!(expanded && s.reachable)) T(metaText(ui), size = 12, color = Tn.sub, family = Mono, maxLines = 1)
             }
             if (expanded) {
                 IconButton(onClick = { renaming = true }) { Sym(Ic.edit, "Edit ${ui.light.name}", tint = Tn.sub, size = 20.dp) }
@@ -367,6 +373,20 @@ private fun ExpandedControls(ui: LightUi, session: TileSession, enabled: Boolean
                 },
                 onRelease = {},
             )
+        }
+    }
+
+    // Details
+    val details = detailRows(ui)
+    if (details.isNotEmpty()) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            TileLabel("Details")
+            details.forEach { (label, value) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    T(label, size = 13, color = Tn.sub, modifier = Modifier.weight(1f))
+                    T(value, size = 13, family = Mono, maxLines = 1)
+                }
+            }
         }
     }
 }
