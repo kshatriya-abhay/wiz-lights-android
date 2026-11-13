@@ -1,6 +1,7 @@
 package io.github.kshatriyaabhay.wizlights.ui
 
 import android.content.Intent
+import android.widget.Toast
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -134,12 +135,18 @@ fun LightsScreen(repo: WizRepository, onSettings: () -> Unit) {
                     if (userRefreshing) {
                         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { Spinner(Modifier.size(18.dp)) }
                     } else {
-                        SquareButton(Ic.refresh, "Refresh lights", { scope.launch { repo.refreshNow() } }, enabled = !blocked && !scanning)
+                        SquareButton(Ic.refresh, "Refresh lights", {
+                            Toast.makeText(context, "Checking saved bulbs…", Toast.LENGTH_SHORT).show()
+                            scope.launch { repo.refreshNow() }
+                        }, enabled = !blocked && !scanning)
                     }
                     if (scanning) {
                         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { Spinner(Modifier.size(18.dp)) }
                     } else {
-                        SquareButton(Ic.scan, "Scan network for new lights", { scope.launch { repo.scan() } }, enabled = !blocked)
+                        SquareButton(Ic.scan, "Scan network for new lights", {
+                            Toast.makeText(context, "Scanning network for bulbs…", Toast.LENGTH_SHORT).show()
+                            scope.launch { repo.scan() }
+                        }, enabled = !blocked)
                     }
                     SquareButton(Ic.settings, "Settings", onSettings)
                 }
